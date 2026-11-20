@@ -20,6 +20,7 @@ import {
 import { usePMS } from '../../store/PMSContext';
 import type {
   DocType,
+  Guest,
   ModuleId,
   PaymentMethodName,
   Reservation,
@@ -193,6 +194,7 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
     if (!checkInRoom) return;
 
     let guestIdToUse = selectedGuestId;
+    let guestOverride: Guest | undefined;
     if (showNewGuestForm) {
       if (!newGuestForm.numDoc.trim() || !newGuestForm.nombres.trim()) {
         notify('error', 'Complete documento y nombres del huésped');
@@ -205,6 +207,8 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
         esVip: false,
       });
       guestIdToUse = created.id;
+      guestOverride = created;
+      setSelectedGuestId(created.id);
     }
 
     if (!guestIdToUse) {
@@ -215,6 +219,7 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
     const stay = checkInGuest({
       roomId: checkInRoom.id,
       guestId: guestIdToUse,
+      guestOverride,
       invitados,
       modalidad,
       cantidad,
@@ -588,22 +593,65 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
       {checkInRoom && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2A2015]/45 p-4 backdrop-blur-xs">
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#E2D2AF] bg-[#FFFDF9] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#EFE4CB] bg-[#FBF6EA] px-6 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EFE4CB] bg-[#FBF6EA] px-5 py-4 sm:px-6">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="text-base font-bold text-[#2A2015]">
                   Check-In · Habitación {checkInRoom.numero}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#6E5D47]">
                   {state.roomTypes.find((t) => t.id === checkInRoom.roomTypeId)?.nombre}
                   {linkedReservation ? ` · Reserva ${linkedReservation.localizador}` : ''}
                 </p>
               </div>
-              <button
-                onClick={() => setCheckInRoom(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <label
+                    htmlFor="checkin-room-switcher"
+                    className="hidden text-[11px] font-semibold text-[#6E5D47] sm:inline"
+                  >
+                    Habitación:
+                  </label>
+                  <select
+                    id="checkin-room-switcher"
+                    value={checkInRoom.id}
+                    onChange={(e) => {
+                      const nextRoom = state.rooms.find((r) => r.id === e.target.value);
+                      if (!nextRoom) return;
+                      const nextRate = getRoomRateForDate(
+                        nextRoom.id,
+                        modalidad === 'HORAS' ? '12h' : '24h'
+                      );
+                      setCheckInRoom(nextRoom);
+                      setTarifa(nextRate);
+                      if (!esCortesia && metodoPago !== 'X PAGAR' && metodoPago !== 'AGENCIAS X PAGAR') {
+                        const resAdvance = linkedReservation?.adelanto || 0;
+                        setMontoPagar(Math.max(0, cantidad * nextRate - resAdvance));
+                      }
+                    }}
+                    className="rounded-lg border border-[#DECFA8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#2A2015] focus:border-[#B8891F] focus:outline-none"
+                    title="Cambiar a otra habitación disponible sin cerrar"
+                  >
+                    {state.rooms
+                      .filter((r) => r.status === 'DISPONIBLE' || r.id === checkInRoom.id)
+                      .map((r) => {
+                        const rType = state.roomTypes.find((t) => t.id === r.roomTypeId);
+                        return (
+                          <option key={r.id} value={r.id}>
+                            Hab. {r.numero} · {rType?.codigoCorto || rType?.nombre} (Piso {r.piso})
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCheckInRoom(null)}
+                  className="rounded-lg p-1.5 text-[#6E5D47] hover:bg-[#EFE4CB] hover:text-[#2A2015]"
+                  aria-label="Cerrar Check-In"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSubmitCheckIn} className="flex-1 space-y-5 overflow-y-auto p-6">

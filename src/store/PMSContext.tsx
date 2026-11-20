@@ -68,6 +68,7 @@ export interface ToastMessage {
 export interface CheckInPayload {
   roomId: string;
   guestId: string;
+  guestOverride?: Guest;
   invitados: { id: string; nombres: string; doc: string }[];
   modalidad: 'NOCHES' | 'HORAS';
   cantidad: number;
@@ -652,9 +653,13 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const checkInGuest = (payload: CheckInPayload): Stay | null => {
     const room = state.rooms.find((r) => r.id === payload.roomId);
-    const guest = state.guests.find((g) => g.id === payload.guestId);
-    if (!room || !guest) {
-      notify('error', 'Datos incompletos', 'Seleccione habitación y huésped.');
+    const guest = payload.guestOverride || state.guests.find((g) => g.id === payload.guestId);
+    if (!room) {
+      notify('error', 'Habitación no válida', 'Seleccione una habitación disponible.');
+      return null;
+    }
+    if (!guest) {
+      notify('error', 'Huésped requerido', 'Seleccione o registre un huésped titular.');
       return null;
     }
 
@@ -1613,15 +1618,28 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveGuest = (guest: Omit<Guest, 'id' | 'fechaRegistro'> & { id?: string }): Guest => {
+    const cleanDoc = guest.numDoc.trim();
+    const existingByDoc = !guest.id && cleanDoc
+      ? state.guests.find(
+          (g) => g.numDoc.trim().toLowerCase() === cleanDoc.toLowerCase() && g.tipoDoc === guest.tipoDoc
+        )
+      : undefined;
+    const targetId = guest.id || existingByDoc?.id;
+
     let savedGuest: Guest;
-    if (guest.id) {
-      savedGuest = { ...guest, id: guest.id, fechaRegistro: toYMD(new Date()) };
+    if (targetId) {
+      savedGuest = {
+        ...guest,
+        numDoc: cleanDoc,
+        id: targetId,
+        fechaRegistro: existingByDoc?.fechaRegistro || toYMD(new Date()),
+      };
       setState((prev) => ({
         ...prev,
-        guests: prev.guests.map((g) => (g.id === guest.id ? { ...g, ...guest } : g)),
+        guests: prev.guests.map((g) => (g.id === targetId ? { ...g, ...savedGuest } : g)),
       }));
     } else {
-      savedGuest = { ...guest, id: genId('g'), fechaRegistro: toYMD(new Date()) };
+      savedGuest = { ...guest, numDoc: cleanDoc, id: genId('g'), fechaRegistro: toYMD(new Date()) };
       setState((prev) => ({ ...prev, guests: [savedGuest, ...prev.guests] }));
     }
     notify('success', 'Huésped guardado', savedGuest.nombres);
