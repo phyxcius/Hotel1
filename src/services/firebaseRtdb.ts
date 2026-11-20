@@ -67,6 +67,9 @@ export function hydrateStateFromSnapshot(raw: unknown, defaults: PMSState): PMSS
     config: {
       ...defaults.config,
       ...candidate.config,
+      logo: candidate.config.logo?.startsWith('/assets/aistudio/')
+        ? `.${candidate.config.logo}`
+        : candidate.config.logo || defaults.config.logo,
       firebaseRtdbUrl: candidate.config.firebaseRtdbUrl || DEFAULT_FIREBASE_RTDB_URL,
       coloresEstado: {
         ...defaults.config.coloresEstado,

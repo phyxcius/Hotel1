@@ -3,7 +3,7 @@ import roomMatKingImg from '../assets/images/room_matrimonial_king_1795108618355
 import roomDobleTwinImg from '../assets/images/room_doble_twin_1795108618375.jpg';
 import roomSuperiorTinaImg from '../assets/images/room_superior_tina_1795108618242.jpg';
 
-const CHUSPA_LOGO_URL = '/assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
+const CHUSPA_LOGO_URL = './assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
 
 const today = new Date();
 const pad = (n: number) => String(n).padStart(2, '0');

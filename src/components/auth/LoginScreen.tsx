@@ -3,7 +3,7 @@ import { ArrowRight, ExternalLink, Lock, ShieldCheck, User, UserCheck } from 'lu
 import { usePMS } from '../../store/PMSContext';
 import { DevConsoleModal } from '../common/DevConsoleModal';
 
-const CHUSPA_LOGO = '/assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
+const CHUSPA_LOGO = './assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
 
 export const LoginScreen: React.FC = () => {
   const { state, login, setActiveShiftId } = usePMS();

@@ -53,7 +53,7 @@ interface SidebarGroup {
   items?: { id: ModuleId; label: string }[];
 }
 
-const CHUSPA_LOGO = '/assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
+const CHUSPA_LOGO = './assets/aistudio/CHUSPITA-circulo_6e5e56f2.png';
 
 function isLightHex(hex: string | undefined): boolean {
   if (!hex || !hex.startsWith('#')) return true;
