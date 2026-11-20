@@ -1,0 +1,6 @@
+{
+  "name": "Pisonay PMS — Sistema Hotelero Integral",
+  "description": "Sistema de gestión hotelera integral con recepción, reservas, tarifas, limpieza, mantenimiento, POS, inventario, caja, facturación y reportes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
