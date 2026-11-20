@@ -15,6 +15,7 @@ import {
 } from '../services/firebaseRtdb';
 import type {
   Agency,
+  AgencyGroup,
   AttendanceLog,
   AuthCode,
   BankDeposit,
@@ -42,6 +43,7 @@ import type {
   SaleRecord,
   StaffPosition,
   Stay,
+  StayPayment,
   SupportTicket,
   SystemUser,
   VoucherType,
@@ -80,6 +82,30 @@ export interface CheckInPayload {
   metodoPago: PaymentMethodName;
   voucherType: VoucherType;
   reservationId?: string;
+}
+
+export interface AgencyGroupRoomAllocation {
+  roomId: string;
+  pax: number;
+  tarifaUnitaria: number;
+  titularNombre?: string;
+  titularDoc?: string;
+}
+
+export interface AgencyGroupCheckInPayload {
+  agencyId: string;
+  agencyOverride?: Agency;
+  nombreGrupo: string;
+  guiaResponsable: string;
+  guiaDoc?: string;
+  totalPax: number;
+  modalidad: 'NOCHES' | 'HORAS';
+  cantidad: number;
+  observaciones: string;
+  allocations: AgencyGroupRoomAllocation[];
+  billingMode: 'UN_SOLO_PAGO_AHORA' | 'CREDITO_AGENCIA';
+  metodoPago: PaymentMethodName;
+  voucherType: VoucherType;
 }
 
 export interface DirectSalePayload {
@@ -134,6 +160,14 @@ interface PMSContextValue {
 
   // Reception & Stay Flows
   checkInGuest: (payload: CheckInPayload) => Stay | null;
+  checkInAgencyGroup: (
+    payload: AgencyGroupCheckInPayload
+  ) => { group: AgencyGroup; stays: Stay[]; sale: SaleRecord | null } | null;
+  payAgencyGroupConsolidated: (
+    groupId: string,
+    metodoPago: PaymentMethodName,
+    voucherType: VoucherType
+  ) => SaleRecord | null;
   addConsumptionToStay: (
     stayId: string,
     items: { productId: string; cantidad: number; precioUnitario: number }[],
@@ -199,7 +233,7 @@ interface PMSContextValue {
   // Guests, Agencies, Blacklist
   saveGuest: (guest: Omit<Guest, 'id' | 'fechaRegistro'> & { id?: string }) => Guest;
   deleteGuest: (id: string) => void;
-  saveAgency: (agency: Omit<Agency, 'id'> & { id?: string }) => void;
+  saveAgency: (agency: Omit<Agency, 'id'> & { id?: string }) => Agency;
   deleteAgency: (id: string) => void;
   savePersonaNoGrata: (png: Omit<PersonaNoGrata, 'id'>) => void;
   deletePersonaNoGrata: (id: string) => void;
@@ -607,6 +641,7 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rooms: nextRooms,
         guests: options.wipeClients ? [] : prev.guests,
         agencies: options.wipeClients ? [] : prev.agencies,
+        agencyGroups: options.wipeTransactions ? [] : prev.agencyGroups,
         personasNoGratas: options.wipeClients ? [] : prev.personasNoGratas,
         stays: options.wipeTransactions ? [] : prev.stays,
         reservations: options.wipeTransactions ? [] : prev.reservations,
@@ -768,6 +803,292 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     notify('success', `Check-In Hab. ${room.numero} completado`, `${guest.nombres} registrado correctamente.`);
     return newStay;
+  };
+
+  const checkInAgencyGroup = (
+    payload: AgencyGroupCheckInPayload
+  ): { group: AgencyGroup; stays: Stay[]; sale: SaleRecord | null } | null => {
+    const agency = payload.agencyOverride || state.agencies.find((a) => a.id === payload.agencyId);
+    if (!agency) {
+      notify('error', 'Agencia requerida', 'Seleccione o registre una agencia de turismo.');
+      return null;
+    }
+    if (payload.allocations.length === 0) {
+      notify('error', 'Sin habitaciones asignadas', 'Seleccione al menos una habitación disponible para el grupo.');
+      return null;
+    }
+
+    const validAllocations = payload.allocations
+      .map((al) => ({
+        ...al,
+        room: state.rooms.find((r) => r.id === al.roomId && r.status === 'DISPONIBLE'),
+      }))
+      .filter((x): x is typeof x & { room: Room } => Boolean(x.room));
+
+    if (validAllocations.length === 0) {
+      notify('error', 'Habitaciones no disponibles', 'Las habitaciones seleccionadas ya no están disponibles.');
+      return null;
+    }
+
+    const now = new Date();
+    const salida = new Date(now);
+    if (payload.modalidad === 'NOCHES') {
+      salida.setDate(salida.getDate() + payload.cantidad);
+      const [hh, mm] = state.config.horaCheckOut.split(':').map(Number);
+      salida.setHours(hh || 10, mm || 0, 0, 0);
+    } else {
+      salida.setHours(salida.getHours() + payload.cantidad);
+    }
+
+    const groupId = genId('grp');
+    const groupCode = `GRP-${String(state.agencyGroups.length + 101)}`;
+    const groupName = payload.nombreGrupo.trim().toUpperCase() || `${agency.nombre} (${payload.totalPax} PAX)`;
+    const guiaNombre = payload.guiaResponsable.trim().toUpperCase() || `GUÍA ${agency.nombre}`;
+    const guiaDoc = (payload.guiaDoc || agency.numDoc || 'S/D').trim();
+
+    // Ensure lead / guide guest record exists cleanly
+    const existingLead = state.guests.find(
+      (g) => g.numDoc.trim().toLowerCase() === guiaDoc.toLowerCase() && g.nombres.toUpperCase() === guiaNombre
+    );
+    const leadGuestId = existingLead?.id || genId('g');
+    const leadGuestToCreate: Guest | null = existingLead
+      ? null
+      : {
+          id: leadGuestId,
+          tipoDoc: agency.tipoDoc === 'RUC' ? 'DNI' : agency.tipoDoc,
+          numDoc: guiaDoc,
+          nombres: guiaNombre,
+          fechaNacimiento: '1990-01-01',
+          fechaRegistro: toYMD(now),
+          nacionalidad: 'EXTRANJERO / TURISMO',
+          sexo: 'M',
+          correo: '',
+          celular: agency.telefono || '',
+          direccion: agency.direccionFiscal || '',
+          esVip: false,
+        };
+
+    const payAllNow =
+      payload.billingMode === 'UN_SOLO_PAGO_AHORA' &&
+      payload.metodoPago !== 'X PAGAR' &&
+      payload.metodoPago !== 'AGENCIAS X PAGAR';
+
+    const grandTotal = validAllocations.reduce(
+      (sum, item) => sum + item.tarifaUnitaria * payload.cantidad,
+      0
+    );
+
+    const singleComprobante = payAllNow
+      ? nextVoucherNumber(state.sales, payload.voucherType, state.config)
+      : undefined;
+
+    const createdStays: Stay[] = validAllocations.map((al) => {
+      const rt = state.roomTypes.find((t) => t.id === al.room.roomTypeId);
+      const stayId = genId('stay');
+      const stayTotal = al.tarifaUnitaria * payload.cantidad;
+      const titularLabel = (al.titularNombre?.trim() || `${guiaNombre} (${groupName})`).toUpperCase();
+      const stayPayments: StayPayment[] = payAllNow && singleComprobante
+        ? [
+            {
+              id: genId('pay'),
+              fecha: now.toISOString(),
+              monto: stayTotal,
+              metodoPago: payload.metodoPago,
+              comprobante: singleComprobante,
+              voucherType: payload.voucherType,
+              concepto: `Pago único grupo ${groupCode} · Hab. ${al.room.numero}`,
+              turno: activeShiftName,
+              responsable: activeUser.username,
+            },
+          ]
+        : [];
+
+      return {
+        id: stayId,
+        roomId: al.room.id,
+        roomNumber: al.room.numero,
+        roomTypeName: rt?.nombre || 'HABITACIÓN',
+        guestId: leadGuestId,
+        guestName: titularLabel,
+        guestDocType: agency.tipoDoc,
+        guestDocNum: al.titularDoc?.trim() || agency.numDoc || guiaDoc,
+        guestNationality: 'GRUPO TURISMO',
+        guestSex: 'M',
+        guestBirthDate: '1990-01-01',
+        invitados: [],
+        modalidad: payload.modalidad,
+        cantidadInicial: payload.cantidad,
+        tarifaBase: al.tarifaUnitaria,
+        fechaEntrada: now.toISOString(),
+        fechaSalidaProgramada: salida.toISOString(),
+        status: 'ACTIVA',
+        esCortesia: false,
+        agencyId: agency.id,
+        agencyName: agency.nombre,
+        groupId,
+        groupName,
+        paxCount: al.pax,
+        observaciones: `[${groupCode}] ${groupName} · ${al.pax} pax. ${payload.observaciones}`.trim(),
+        consumptions: [],
+        renewals: [],
+        payments: stayPayments,
+        totalCargos: stayTotal,
+        totalPagado: payAllNow ? stayTotal : 0,
+        saldoPendiente: payAllNow ? 0 : stayTotal,
+      };
+    });
+
+    const stayByRoomId = new Map(createdStays.map((s) => [s.roomId, s.id]));
+
+    const singleSale: SaleRecord | null =
+      payAllNow && singleComprobante
+        ? {
+            id: genId('sale'),
+            fecha: now.toISOString(),
+            origenTipo: 'HABITACION',
+            roomNumber: createdStays.map((s) => s.roomNumber).join(', '),
+            guestName: agency.nombre,
+            guestDoc: agency.numDoc,
+            descripcion: `Facturación Grupal ${groupCode}: ${groupName} (${payload.totalPax} pax · ${createdStays.length} habs · ${payload.cantidad} ${payload.modalidad.toLowerCase()})`,
+            metodoPago: payload.metodoPago,
+            voucherType: payload.voucherType,
+            comprobante: singleComprobante,
+            monto: grandTotal,
+            esCortesia: false,
+            turno: activeShiftName,
+            responsable: activeUser.username,
+            status: 'ACTIVO',
+            sunatEnviado: state.config.sunafactActivo,
+            groupId,
+          }
+        : null;
+
+    const newGroup: AgencyGroup = {
+      id: groupId,
+      codigo: groupCode,
+      nombreGrupo: groupName,
+      agencyId: agency.id,
+      agencyName: agency.nombre,
+      agencyDoc: agency.numDoc,
+      guiaResponsable: guiaNombre,
+      totalPax: payload.totalPax,
+      fechaEntrada: now.toISOString(),
+      fechaSalidaProgramada: salida.toISOString(),
+      noches: payload.cantidad,
+      observaciones: payload.observaciones,
+      status: 'ACTIVO',
+      facturadoConsolidado: Boolean(singleSale),
+      comprobanteConsolidado: singleComprobante,
+      montoTotalConsolidado: singleSale ? grandTotal : undefined,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      guests: leadGuestToCreate ? [leadGuestToCreate, ...prev.guests] : prev.guests,
+      agencyGroups: [newGroup, ...prev.agencyGroups],
+      stays: [...createdStays, ...prev.stays],
+      rooms: prev.rooms.map((r) => {
+        const assignedStayId = stayByRoomId.get(r.id);
+        return assignedStayId ? { ...r, status: 'OCUPADO', currentStayId: assignedStayId } : r;
+      }),
+      sales: singleSale ? [singleSale, ...prev.sales] : prev.sales,
+    }));
+
+    notify(
+      'success',
+      `Grupo ${groupCode} ingresado (${createdStays.length} habs · ${payload.totalPax} pax)`,
+      singleSale
+        ? `Pago único ${singleComprobante} por S/ ${grandTotal.toFixed(2)} a ${agency.nombre}`
+        : `Cuenta consolidada por cobrar a ${agency.nombre}`
+    );
+
+    return { group: newGroup, stays: createdStays, sale: singleSale };
+  };
+
+  const payAgencyGroupConsolidated = (
+    groupId: string,
+    metodoPago: PaymentMethodName,
+    voucherType: VoucherType
+  ): SaleRecord | null => {
+    const group = state.agencyGroups.find((g) => g.id === groupId);
+    if (!group) return null;
+
+    const groupStaysWithBalance = state.stays.filter(
+      (s) => s.groupId === groupId && s.saldoPendiente > 0
+    );
+    if (groupStaysWithBalance.length === 0) {
+      notify('info', 'Grupo sin saldo pendiente', 'Todas las habitaciones del grupo ya están pagadas.');
+      return null;
+    }
+
+    const totalBalance = groupStaysWithBalance.reduce((sum, s) => sum + s.saldoPendiente, 0);
+    const now = new Date().toISOString();
+    const comprobante = nextVoucherNumber(state.sales, voucherType, state.config);
+    const roomNumbers = groupStaysWithBalance.map((s) => s.roomNumber).join(', ');
+
+    const consolidatedSale: SaleRecord = {
+      id: genId('sale'),
+      fecha: now,
+      origenTipo: 'HABITACION',
+      roomNumber: roomNumbers,
+      guestName: group.agencyName,
+      guestDoc: group.agencyDoc,
+      descripcion: `Liquidación Consolidada ${group.codigo}: ${group.nombreGrupo} (${groupStaysWithBalance.length} habs · ${group.totalPax} pax)`,
+      metodoPago,
+      voucherType,
+      comprobante,
+      monto: totalBalance,
+      esCortesia: false,
+      turno: activeShiftName,
+      responsable: activeUser.username,
+      status: 'ACTIVO',
+      sunatEnviado: state.config.sunafactActivo,
+      groupId: group.id,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      stays: prev.stays.map((s) => {
+        if (s.groupId !== groupId || s.saldoPendiente <= 0) return s;
+        const paidAmount = s.saldoPendiente;
+        const newPayment: StayPayment = {
+          id: genId('pay'),
+          fecha: now,
+          monto: paidAmount,
+          metodoPago,
+          comprobante,
+          voucherType,
+          concepto: `Liquidación única grupo ${group.codigo} (${group.agencyName})`,
+          turno: activeShiftName,
+          responsable: activeUser.username,
+        };
+        return {
+          ...s,
+          consumptions: s.consumptions.map((c) => ({ ...c, pagado: true })),
+          payments: [...s.payments, newPayment],
+          totalPagado: s.totalPagado + paidAmount,
+          saldoPendiente: 0,
+        };
+      }),
+      agencyGroups: prev.agencyGroups.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              facturadoConsolidado: true,
+              comprobanteConsolidado: comprobante,
+              montoTotalConsolidado: (g.montoTotalConsolidado || 0) + totalBalance,
+            }
+          : g
+      ),
+      sales: [consolidatedSale, ...prev.sales],
+    }));
+
+    notify(
+      'success',
+      `Pago único consolidado ${comprobante}`,
+      `${group.agencyName}: S/ ${totalBalance.toFixed(2)} liquidado en 1 comprobante.`
+    );
+    return consolidatedSale;
   };
 
   const addConsumptionToStay = (
@@ -1100,13 +1421,19 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               roomId: targetRoom.id,
               roomNumber: targetRoom.numero,
               roomTypeName: rt?.nombre || s.roomTypeName,
-              observaciones: `${s.observaciones} [Cambio de Hab. ${stay.roomNumber} -> ${targetRoom.numero}]`.trim(),
+              observaciones: `${s.observaciones} [Cambio de Hab. ${stay.roomNumber} -> ${targetRoom.numero}${s.groupName ? ` · Mantiene Grupo ${s.groupName}` : ''}]`.trim(),
             }
           : s
       ),
     }));
 
-    notify('success', `Cambio de habitación realizado`, `Huésped movido a Hab. ${targetRoom.numero}`);
+    notify(
+      'success',
+      `Cambio de habitación realizado`,
+      stay.groupName
+        ? `Hab. ${targetRoom.numero} asignada manteniendo grupo ${stay.groupName} (${stay.agencyName || 'Agencia'})`
+        : `Huésped movido a Hab. ${targetRoom.numero}`
+    );
   };
 
   const checkOutStay = (
@@ -1651,14 +1978,26 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('info', 'Registro de huésped eliminado');
   };
 
-  const saveAgency = (agency: Omit<Agency, 'id'> & { id?: string }) => {
+  const saveAgency = (agency: Omit<Agency, 'id'> & { id?: string }): Agency => {
+    const cleanName = agency.nombre.trim().toUpperCase();
+    const cleanDoc = agency.numDoc.trim();
+    const existing = !agency.id && cleanDoc
+      ? state.agencies.find((a) => a.numDoc.trim() === cleanDoc || a.nombre.trim().toUpperCase() === cleanName)
+      : undefined;
+    const targetId = agency.id || existing?.id;
+
+    const saved: Agency = targetId
+      ? { ...agency, id: targetId, nombre: cleanName, numDoc: cleanDoc }
+      : { ...agency, id: genId('ag'), nombre: cleanName, numDoc: cleanDoc };
+
     setState((prev) => ({
       ...prev,
-      agencies: agency.id
-        ? prev.agencies.map((a) => (a.id === agency.id ? { ...a, ...agency } : a))
-        : [{ ...agency, id: genId('ag') }, ...prev.agencies],
+      agencies: targetId
+        ? prev.agencies.map((a) => (a.id === targetId ? saved : a))
+        : [saved, ...prev.agencies],
     }));
-    notify('success', 'Empresa / Agencia guardada');
+    notify('success', 'Empresa / Agencia guardada', saved.nombre);
+    return saved;
   };
 
   const deleteAgency = (id: string) => {
@@ -1863,6 +2202,8 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testFirebase,
         getRoomRateForDate,
         checkInGuest,
+        checkInAgencyGroup,
+        payAgencyGroupConsolidated,
         addConsumptionToStay,
         deliverRoomOrder,
         renewStay,

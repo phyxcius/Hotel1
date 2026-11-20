@@ -189,6 +189,9 @@ export interface Stay {
   esCortesia: boolean;
   agencyId?: string;
   agencyName?: string;
+  groupId?: string;
+  groupName?: string;
+  paxCount?: number;
   observaciones: string;
   consumptions: StayConsumption[];
   renewals: StayRenewal[];
@@ -197,6 +200,25 @@ export interface Stay {
   totalPagado: number;
   saldoPendiente: number;
   reservationId?: string;
+}
+
+export interface AgencyGroup {
+  id: string;
+  codigo: string;
+  nombreGrupo: string;
+  agencyId: string;
+  agencyName: string;
+  agencyDoc?: string;
+  guiaResponsable: string;
+  totalPax: number;
+  fechaEntrada: string;
+  fechaSalidaProgramada: string;
+  noches: number;
+  observaciones: string;
+  status: 'ACTIVO' | 'CERRADO';
+  facturadoConsolidado?: boolean;
+  comprobanteConsolidado?: string;
+  montoTotalConsolidado?: number;
 }
 
 export type ReservationStatus = 'CONFIRMADA' | 'PENDIENTE' | 'CHECKED_IN' | 'CANCELADA';
@@ -323,6 +345,7 @@ export interface SaleRecord {
   motivoAnulacion?: string;
   sunatEnviado?: boolean;
   stayId?: string;
+  groupId?: string;
 }
 
 export interface CashRegisterClose {
@@ -513,6 +536,7 @@ export interface PMSState {
   rooms: Room[];
   guests: Guest[];
   agencies: Agency[];
+  agencyGroups: AgencyGroup[];
   personasNoGratas: PersonaNoGrata[];
   stays: Stay[];
   reservations: Reservation[];

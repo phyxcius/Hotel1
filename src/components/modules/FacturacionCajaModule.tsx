@@ -8,6 +8,7 @@ import {
   Plus,
   Printer,
   Search,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ interface FacturacionCajaModuleProps {
 
 type FacturacionTab =
   | 'VENTAS'
+  | 'GRUPOS'
   | 'CIERRE'
   | 'CAMBIOS'
   | 'LIMPIEZA'
@@ -44,6 +46,7 @@ export const FacturacionCajaModule: React.FC<FacturacionCajaModuleProps> = ({ mo
     voidSale,
     closeCashRegister,
     payStayBalance,
+    payAgencyGroupConsolidated,
     registerExpense,
     registerBankDeposit,
     notify,
@@ -68,6 +71,11 @@ export const FacturacionCajaModule: React.FC<FacturacionCajaModuleProps> = ({ mo
   const [cobroMonto, setCobroMonto] = useState(0);
   const [cobroMetodo, setCobroMetodo] = useState<PaymentMethodName>('EFECTIVO');
   const [cobroVoucher, setCobroVoucher] = useState<VoucherType>('BOLETA');
+
+  // Consolidated Group Settlement Modal
+  const [cobroGroupId, setCobroGroupId] = useState<string | null>(null);
+  const [groupMetodo, setGroupMetodo] = useState<PaymentMethodName>('TRANSFERENCIA');
+  const [groupVoucher, setGroupVoucher] = useState<VoucherType>('FACTURA');
 
   // Expense Form State
   const [expFecha, setExpFecha] = useState(() => toYMD(new Date()));
@@ -475,6 +483,7 @@ export const FacturacionCajaModule: React.FC<FacturacionCajaModuleProps> = ({ mo
         <div className="flex flex-wrap gap-1.5">
           {[
             { id: 'VENTAS', label: 'Resumen Ventas' },
+            { id: 'GRUPOS', label: `Grupos Agencias (${state.agencyGroups.length})` },
             { id: 'CIERRE', label: 'Cierre de Caja' },
             { id: 'COBRANZA', label: `Cobranza (${pendingCollectionStays.length})` },
             { id: 'CAMBIOS', label: 'Cambios de Hab.' },
@@ -753,6 +762,125 @@ export const FacturacionCajaModule: React.FC<FacturacionCajaModuleProps> = ({ mo
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {tab === 'GRUPOS' && (
+        <div className="space-y-4">
+          {state.agencyGroups.length === 0 ? (
+            <div className="rounded-xl border border-[#E2D2AF] bg-[#FFFDF9] px-6 py-12 text-center text-xs text-[#6E5D47]">
+              <Users className="mx-auto mb-2 h-8 w-8 text-[#B8891F]" />
+              <p className="font-semibold text-[#2A2015]">
+                No hay grupos de agencias registrados todavía.
+              </p>
+              <p className="mt-1">
+                Puede ingresar grupos desde <strong>Recepción → Grupo Agencia</strong> eligiendo la agencia, cantidad de personas por tipo de habitación y facturación consolidada.
+              </p>
+            </div>
+          ) : (
+            state.agencyGroups.map((grp) => {
+              const grpStays = state.stays.filter((s) => s.groupId === grp.id);
+              const totalCargos = grpStays.reduce((sum, s) => sum + s.totalCargos, 0);
+              const totalPagado = grpStays.reduce((sum, s) => sum + s.totalPagado, 0);
+              const totalSaldo = grpStays.reduce((sum, s) => sum + s.saldoPendiente, 0);
+              const roomList = grpStays.map((s) => `${s.roomNumber} (${s.paxCount || 1}p)`).join(', ');
+
+              return (
+                <div
+                  key={grp.id}
+                  className="rounded-xl border border-[#E2D2AF] bg-[#FFFDF9] p-4 shadow-xs text-xs"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#EFE4CB] pb-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-[#3A2B18] px-2 py-0.5 font-mono text-[11px] font-bold text-white">
+                          {grp.codigo}
+                        </span>
+                        <h3 className="text-sm font-bold text-[#2A2015]">{grp.nombreGrupo}</h3>
+                        <span className="rounded bg-[#FBF5E6] px-2 py-0.5 text-[11px] font-bold text-[#9A6E0E]">
+                          {grp.agencyName} {grp.agencyDoc ? `· ${grp.agencyDoc}` : ''}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#6E5D47]">
+                        Guía: <strong>{grp.guiaResponsable}</strong> · Personas:{' '}
+                        <strong>{grp.totalPax} pax</strong> · Habitaciones ({grpStays.length}):{' '}
+                        <strong className="font-mono text-[#2A2015]">{roomList || '-'}</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {totalSaldo > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCobroGroupId(grp.id);
+                            setGroupMetodo('TRANSFERENCIA');
+                            setGroupVoucher('FACTURA');
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#9A6E0E] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#7E590A]"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Cobrar Todo en 1 Pago ({formatCurrency(totalSaldo)})
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPrintTicket({
+                              tipo: 'COMPROBANTE',
+                              titulo: 'FACTURACIÓN CONSOLIDADA DE GRUPO',
+                              numero: grp.comprobanteConsolidado || grp.codigo,
+                              fecha: grp.fechaEntrada,
+                              cliente: grp.agencyName,
+                              documento: grp.agencyDoc,
+                              habitacion: `${grpStays.length} Hab(s): ${grpStays.map((s) => s.roomNumber).join(', ')}`,
+                              detalleLineas: [
+                                { label: 'Grupo', value: grp.nombreGrupo },
+                                { label: 'Total Personas', value: `${grp.totalPax} pax` },
+                                { label: 'Guía', value: grp.guiaResponsable },
+                                { label: 'Total Cargos', value: formatCurrency(totalCargos) },
+                                { label: 'Pagado Consolidado', value: formatCurrency(totalPagado) },
+                              ],
+                              total: totalCargos,
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#DECFA8] bg-white px-3 py-1.5 text-xs font-semibold text-[#3A2B18] hover:bg-[#FBF6EA]"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-[#9A6E0E]" />
+                          Ver Comprobante ({grp.comprobanteConsolidado || 'PAGADO'})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 tabular-nums">
+                    <div className="rounded-lg bg-[#FAF7F0] px-3 py-2">
+                      <span className="text-[11px] text-[#6E5D47]">Total Cargos del Grupo</span>
+                      <p className="font-mono text-sm font-bold text-[#2A2015]">
+                        {formatCurrency(totalCargos)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-[#FAF7F0] px-3 py-2">
+                      <span className="text-[11px] text-[#6E5D47]">Pagado a Cuenta</span>
+                      <p className="font-mono text-sm font-bold text-emerald-700">
+                        {formatCurrency(totalPagado)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-[#FAF7F0] px-3 py-2">
+                      <span className="text-[11px] text-[#6E5D47]">Saldo Consolidado Pendiente</span>
+                      <p
+                        className={`font-mono text-sm font-bold ${
+                          totalSaldo > 0 ? 'text-red-600' : 'text-emerald-700'
+                        }`}
+                      >
+                        {formatCurrency(totalSaldo)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 
@@ -1104,6 +1232,108 @@ export const FacturacionCajaModule: React.FC<FacturacionCajaModuleProps> = ({ mo
           </div>
         </div>
       )}
+
+      {cobroGroupId && (() => {
+        const grp = state.agencyGroups.find((g) => g.id === cobroGroupId);
+        if (!grp) return null;
+        const grpStays = state.stays.filter((s) => s.groupId === grp.id && s.saldoPendiente > 0);
+        const totalPending = grpStays.reduce((sum, s) => sum + s.saldoPendiente, 0);
+        return (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2A2015]/45 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-2xl border border-[#E2D2AF] bg-[#FFFDF9] p-6 shadow-2xl text-xs">
+              <div className="flex items-center justify-between border-b border-[#EFE4CB] pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-[#2A2015]">
+                    Liquidación Consolidada (1 Solo Pago)
+                  </h3>
+                  <p className="text-[11px] text-[#6E5D47]">
+                    {grp.agencyName} · {grp.nombreGrupo}
+                  </p>
+                </div>
+                <button onClick={() => setCobroGroupId(null)} className="text-[#6E5D47]">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-lg border border-[#E2D2AF] bg-[#FAF7F0] p-3 tabular-nums">
+                  <p className="text-[11px] text-[#6E5D47]">
+                    Habitaciones con saldo ({grpStays.length}):{' '}
+                    <strong className="font-mono text-[#2A2015]">
+                      {grpStays.map((s) => s.roomNumber).join(', ')}
+                    </strong>
+                  </p>
+                  <p className="mt-1 text-base font-bold text-[#9A6E0E] font-mono">
+                    Total Único a Facturar: {formatCurrency(totalPending)}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block font-semibold text-[#5C4A33]">Forma de Pago</label>
+                    <select
+                      value={groupMetodo}
+                      onChange={(e) => setGroupMetodo(e.target.value as PaymentMethodName)}
+                      className="w-full rounded-lg border border-[#DECFA8] bg-white px-2.5 py-2"
+                    >
+                      <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                      <option value="EFECTIVO">EFECTIVO</option>
+                      <option value="TARJETA">TARJETA</option>
+                      <option value="YAPE">YAPE</option>
+                      <option value="PLIN">PLIN</option>
+                      <option value="AGENCIA">AGENCIA</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-[#5C4A33]">Comprobante Único</label>
+                    <select
+                      value={groupVoucher}
+                      onChange={(e) => setGroupVoucher(e.target.value as VoucherType)}
+                      className="w-full rounded-lg border border-[#DECFA8] bg-white px-2.5 py-2"
+                    >
+                      <option value="FACTURA">FACTURA</option>
+                      <option value="BOLETA">BOLETA</option>
+                      <option value="TICKET">TICKET</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setCobroGroupId(null)}
+                    className="rounded-lg border border-[#DECFA8] px-4 py-2 font-semibold text-[#5C4A33]"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      const sale = payAgencyGroupConsolidated(grp.id, groupMetodo, groupVoucher);
+                      setCobroGroupId(null);
+                      if (sale) {
+                        setPrintTicket({
+                          tipo: 'COMPROBANTE',
+                          titulo: `${sale.voucherType} CONSOLIDADA DE GRUPO`,
+                          numero: sale.comprobante,
+                          fecha: sale.fecha,
+                          cliente: sale.guestName,
+                          documento: sale.guestDoc,
+                          habitacion: sale.roomNumber ? `Habs: ${sale.roomNumber}` : undefined,
+                          detalleLineas: [
+                            { label: 'Grupo', value: `${grp.codigo} · ${grp.nombreGrupo}` },
+                            { label: 'Personas', value: `${grp.totalPax} pax` },
+                            { label: 'Forma de Pago', value: sale.metodoPago },
+                          ],
+                          total: sale.monto,
+                        });
+                      }
+                    }}
+                    className="rounded-lg bg-[#9A6E0E] px-4 py-2 font-semibold text-white hover:bg-[#7E590A]"
+                  >
+                    Emitir 1 Comprobante y Liquidar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <PrintTicketModal ticket={printTicket} onClose={() => setPrintTicket(null)} />
     </div>

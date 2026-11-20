@@ -30,6 +30,7 @@ import type {
 } from '../../types/pms';
 import { formatCurrency, formatDateTime } from '../../utils/exportCsv';
 import { PrintTicketModal, type PrintTicketData } from '../common/PrintTicketModal';
+import { AgencyGroupModal } from './AgencyGroupModal';
 import { toYMD } from '../../data/seedData';
 
 interface RecepcionModuleProps {
@@ -64,6 +65,7 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
   const [floorFilter, setFloorFilter] = useState<'ALL' | number>('ALL');
   const [rightTab, setRightTab] = useState<'PEDIDOS' | 'RESERVAS'>('PEDIDOS');
   const [printTicket, setPrintTicket] = useState<PrintTicketData | null>(null);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
 
   // Check-In Modal State
   const [checkInRoom, setCheckInRoom] = useState<Room | null>(null);
@@ -347,6 +349,13 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
             Reserva
           </button>
           <button
+            onClick={() => setGroupModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#B8891F] bg-[#FBF5E6] px-3 py-1.5 text-xs font-bold text-[#7E590A] hover:bg-[#F3E9D2] whitespace-nowrap"
+          >
+            <Users className="h-3.5 w-3.5 text-[#9A6E0E]" />
+            Grupo Agencia
+          </button>
+          <button
             onClick={() => onNavigate('facturacion')}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D2AF] bg-[#FFFDF9] px-3 py-1.5 text-xs font-medium text-[#3A2B18] hover:bg-[#FBF6EA] whitespace-nowrap"
           >
@@ -438,6 +447,13 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
                                 <p className="truncate text-xs font-semibold text-slate-900">
                                   {stay.guestName}
                                 </p>
+                                {(stay.groupName || stay.agencyName) && (
+                                  <p className="truncate rounded bg-[#FBF5E6] px-1.5 py-0.5 text-[10px] font-bold text-[#9A6E0E]">
+                                    {stay.agencyName ? `${stay.agencyName} · ` : ''}
+                                    {stay.groupName || 'Agencia'}
+                                    {stay.paxCount ? ` (${stay.paxCount} pax)` : ''}
+                                  </p>
+                                )}
                                 <div className="flex items-center justify-between text-[11px] tabular-nums">
                                   <span className="text-slate-500">
                                     Sal: {stay.fechaSalidaProgramada.slice(5, 16).replace('T', ' ')}
@@ -1038,6 +1054,13 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
                   {activeStay.roomTypeName} · Ingreso: {formatDateTime(activeStay.fechaEntrada)} · Salida:{' '}
                   {formatDateTime(activeStay.fechaSalidaProgramada)}
                 </p>
+                {(activeStay.groupName || activeStay.agencyName) && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-[#E2D2AF] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#9A6E0E]">
+                    Agencia: {activeStay.agencyName || 'Vinculada'}
+                    {activeStay.groupName ? ` · Grupo: ${activeStay.groupName}` : ''}
+                    {activeStay.paxCount ? ` (${activeStay.paxCount} pax)` : ''}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setActiveStayId(null)}
@@ -1494,6 +1517,9 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
                   </div>
                   <p className="text-[11px] text-slate-500">
                     La habitación actual ({activeStay.roomNumber}) pasará automáticamente a estado En Limpieza.
+                    {activeStay.groupName
+                      ? ` Se mantendrá vinculada al grupo "${activeStay.groupName}" (${activeStay.agencyName || 'Agencia'}) y a su facturación consolidada.`
+                      : ''}
                   </p>
                 </div>
               )}
@@ -1576,6 +1602,35 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
             </div>
           </div>
         </div>
+      )}
+
+      {groupModalOpen && (
+        <AgencyGroupModal
+          onClose={() => setGroupModalOpen(false)}
+          onSuccess={({ group, stays, sale }) => {
+            setGroupModalOpen(false);
+            setPrintTicket({
+              tipo: sale ? 'COMPROBANTE' : 'INGRESO',
+              titulo: sale
+                ? `${sale.voucherType} CONSOLIDADA · GRUPO AGENCIA`
+                : `REGISTRO GRUPAL ${group.codigo}`,
+              numero: sale?.comprobante || group.codigo,
+              fecha: group.fechaEntrada,
+              cliente: group.agencyName,
+              documento: group.agencyDoc,
+              habitacion: `${stays.length} Hab(s): ${stays.map((s) => s.roomNumber).join(', ')}`,
+              detalleLineas: [
+                { label: 'Grupo', value: group.nombreGrupo },
+                { label: 'Total Personas (PAX)', value: `${group.totalPax} personas` },
+                { label: 'Guía / Responsable', value: group.guiaResponsable },
+                { label: 'Estado Pago', value: sale ? `${sale.metodoPago} (PAGADO)` : 'CRÉDITO AGENCIA (X PAGAR)' },
+                { label: 'Total Grupo', value: formatCurrency(stays.reduce((sum, s) => sum + s.totalCargos, 0)) },
+              ],
+              total: stays.reduce((sum, s) => sum + s.totalCargos, 0),
+              incluirPoliticas: false,
+            });
+          }}
+        />
       )}
 
       <PrintTicketModal ticket={printTicket} onClose={() => setPrintTicket(null)} />

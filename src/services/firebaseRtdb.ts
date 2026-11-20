@@ -1,4 +1,4 @@
-import type { PMSState, Purchase, Stay } from '../types/pms';
+import type { AgencyGroup, PMSState, Purchase, Stay } from '../types/pms';
 
 export const DEFAULT_FIREBASE_RTDB_URL = 'https://hotel1-a87e6-default-rtdb.firebaseio.com';
 const DB_NODE = 'hotel_pms/v1';
@@ -94,6 +94,7 @@ export function hydrateStateFromSnapshot(raw: unknown, defaults: PMSState): PMSS
     rooms: normalizeArray(candidate.rooms, defaults.rooms),
     guests: normalizeArray(candidate.guests, []),
     agencies: normalizeArray(candidate.agencies, []),
+    agencyGroups: normalizeArray<AgencyGroup>(candidate.agencyGroups, []),
     personasNoGratas: normalizeArray(candidate.personasNoGratas, []),
     stays,
     reservations: normalizeArray(candidate.reservations, []),

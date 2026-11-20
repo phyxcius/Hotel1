@@ -425,6 +425,7 @@ export const INITIAL_PMS_STATE: PMSState = {
       direccionFiscal: 'Calle Plateros 312, Cusco',
     },
   ],
+  agencyGroups: [],
   personasNoGratas: [
     {
       id: 'png-1',
