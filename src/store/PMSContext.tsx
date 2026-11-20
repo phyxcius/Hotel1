@@ -201,6 +201,7 @@ interface PMSContextValue {
 
   // Reservations
   createReservation: (res: Omit<Reservation, 'id' | 'localizador'>) => Reservation;
+  updateReservation: (id: string, updates: Partial<Reservation>) => boolean;
   updateReservationStatus: (id: string, status: ReservationStatus) => void;
   deleteReservation: (id: string) => void;
 
@@ -1534,6 +1535,48 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newRes;
   };
 
+  const updateReservation = (id: string, updates: Partial<Reservation>): boolean => {
+    const current = state.reservations.find((r) => r.id === id);
+    if (!current) return false;
+
+    const merged: Reservation = { ...current, ...updates };
+    const startYmd = merged.fechaEntrada.slice(0, 10);
+    const endYmd = merged.fechaSalida.slice(0, 10);
+
+    if (endYmd <= startYmd) {
+      notify('error', 'Fechas inválidas', 'La fecha de salida debe ser posterior a la fecha de entrada.');
+      return false;
+    }
+
+    if (merged.status !== 'CANCELADA') {
+      const conflict = state.reservations.find((r) => {
+        if (r.id === id || r.roomId !== merged.roomId || r.status === 'CANCELADA') return false;
+        const rStart = r.fechaEntrada.slice(0, 10);
+        const rEnd = r.fechaSalida.slice(0, 10);
+        return startYmd < rEnd && endYmd > rStart;
+      });
+      if (conflict) {
+        notify(
+          'warning',
+          `Cruce en Hab. ${merged.roomNumber}`,
+          `Se superpone con ${conflict.localizador} (${conflict.guestName}: ${conflict.fechaEntrada.slice(0, 10)} al ${conflict.fechaSalida.slice(0, 10)}).`
+        );
+        return false;
+      }
+    }
+
+    setState((prev) => ({
+      ...prev,
+      reservations: prev.reservations.map((r) => (r.id === id ? merged : r)),
+    }));
+    notify(
+      'success',
+      `Reserva ${merged.localizador} actualizada`,
+      `Hab. ${merged.roomNumber} · ${startYmd} al ${endYmd} (${merged.noches} noches)`
+    );
+    return true;
+  };
+
   const updateReservationStatus = (id: string, status: ReservationStatus) => {
     setState((prev) => ({
       ...prev,
@@ -2211,6 +2254,7 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         changeRoom,
         checkOutStay,
         createReservation,
+        updateReservation,
         updateReservationStatus,
         deleteReservation,
         setRoomStatus,
