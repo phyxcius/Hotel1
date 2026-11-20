@@ -1,23 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlarmClock,
+  AlertTriangle,
   BarChart3,
   BedDouble,
   Bell,
+  Bot,
   Building2,
   CalendarDays,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
   Clock,
+  Compass,
+  Cpu,
   CreditCard,
   DollarSign,
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  HeartPulse,
   Home,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  Luggage,
   Menu,
   Package,
   Palette,
@@ -32,6 +39,7 @@ import {
   Truck,
   UserCheck,
   Users,
+  UtensilsCrossed,
   Wrench,
   X,
 } from 'lucide-react';
@@ -106,6 +114,27 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { id: 'reservas_libro', label: 'Libro de Reservas' },
       { id: 'reservas_llegadas', label: 'Llegadas' },
       { id: 'reservas_control', label: 'Control de Reservas' },
+    ],
+  },
+  {
+    id: 'concierge_360',
+    label: 'Concierge & CRM IA',
+    icon: <Bot className="h-4 w-4" />,
+    items: [
+      { id: 'crm_whatsapp', label: 'CRM & Agente WhatsApp' },
+      { id: 'despertador_pbx', label: 'Despertador PBX + WA' },
+      { id: 'paquetes_tours', label: 'Paquetes Turísticos & Spa' },
+    ],
+  },
+  {
+    id: 'operacion_iot',
+    label: 'Operación Inteligente',
+    icon: <Cpu className="h-4 w-4" />,
+    items: [
+      { id: 'kds_cocina', label: 'Room Service & KDS' },
+      { id: 'bell_boys', label: 'Bell Boys & Traslados' },
+      { id: 'salud_emergencias', label: 'Salud, Oxígeno & SOS' },
+      { id: 'grms_iot', label: 'Domótica GRMS & Accesos' },
     ],
   },
   {
@@ -214,6 +243,13 @@ const QUICK_NAV: { id: ModuleId; label: string; icon: React.ReactNode }[] = [
   { id: 'despacho', label: 'Despacho', icon: <Truck className="h-3.5 w-3.5" /> },
   { id: 'mantenimientos', label: 'Mantenimiento', icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: 'configuracion_diseno', label: 'Diseño Luxury', icon: <Palette className="h-3.5 w-3.5" /> },
+  { id: 'crm_whatsapp', label: 'CRM WhatsApp', icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: 'despertador_pbx', label: 'Despertador PBX', icon: <AlarmClock className="h-3.5 w-3.5" /> },
+  { id: 'paquetes_tours', label: 'Tours & Spa', icon: <Compass className="h-3.5 w-3.5" /> },
+  { id: 'kds_cocina', label: 'Cocina KDS', icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
+  { id: 'bell_boys', label: 'Bell Boys', icon: <Luggage className="h-3.5 w-3.5" /> },
+  { id: 'salud_emergencias', label: 'Salud / O₂', icon: <HeartPulse className="h-3.5 w-3.5" /> },
+  { id: 'grms_iot', label: 'Domótica GRMS', icon: <Cpu className="h-3.5 w-3.5" /> },
 ];
 
 const MODULE_LABELS: Record<ModuleId, string> = {
@@ -252,6 +288,13 @@ const MODULE_LABELS: Record<ModuleId, string> = {
   contabilidad: 'Contabilidad / Facturación Electrónica SUNAFACT',
   servicios_pagos: 'Mis Servicios y Pagos',
   soporte: 'Soporte y Solicitudes',
+  crm_whatsapp: 'Concierge / CRM Omnicanal & Agente WhatsApp IA',
+  despertador_pbx: 'Concierge / Despertador Inteligente (PBX + WhatsApp + IoT)',
+  paquetes_tours: 'Concierge / Paquetes Turísticos, Expediciones & Spa',
+  kds_cocina: 'Operación Inteligente / Room Service & Cocina KDS',
+  bell_boys: 'Operación Inteligente / Bell Boys, Equipaje QR & Traslados',
+  salud_emergencias: 'Operación Inteligente / Salud, Oxígeno & Emergencias SOS',
+  grms_iot: 'Operación Inteligente / Domótica GRMS, Sensores & Llaves NFC',
 };
 
 export const AppShell: React.FC<AppShellProps> = ({ activeModule, onNavigate, children }) => {
@@ -332,6 +375,8 @@ export const AppShell: React.FC<AppShellProps> = ({ activeModule, onNavigate, ch
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     habitaciones: true,
     reservas: true,
+    concierge_360: true,
+    operacion_iot: true,
     clientes: false,
     abastecimiento: false,
     caja: false,
@@ -349,6 +394,10 @@ export const AppShell: React.FC<AppShellProps> = ({ activeModule, onNavigate, ch
   const pendingArrivals = state.reservations.filter(
     (r) => r.status === 'CONFIRMADA' || r.status === 'PENDIENTE'
   ).length;
+  const activeMedicalAlerts = state.medicalAlerts.filter(
+    (m) => m.status === 'ACTIVA' || m.status === 'EN_ATENCION'
+  );
+  const failedWakeUps = state.wakeUpCalls.filter((w) => w.status === 'FALLO_SIN_RESPUESTA');
 
   const toggleGroup = (id: string) => {
     setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -759,6 +808,35 @@ export const AppShell: React.FC<AppShellProps> = ({ activeModule, onNavigate, ch
             </div>
           </div>
         </header>
+
+        {/* Global Priority Medical / Wake-Up Alert Banner */}
+        {(activeMedicalAlerts.length > 0 || failedWakeUps.length > 0) && (
+          <div className="no-print border-b border-red-300 bg-red-600 px-4 py-2 text-xs text-white flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 animate-pulse" />
+              {activeMedicalAlerts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectModule('salud_emergencias')}
+                  className="font-bold underline decoration-white/60 hover:text-amber-200"
+                >
+                  EMERGENCIA / OXÍGENO ACTIVA ({activeMedicalAlerts.length}): Hab.{' '}
+                  {activeMedicalAlerts.map((a) => a.roomNumber).join(', ')} → Atender ahora
+                </button>
+              )}
+              {failedWakeUps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectModule('despertador_pbx')}
+                  className="font-bold underline decoration-white/60 hover:text-amber-200"
+                >
+                  DESPERTADOR SIN RESPUESTA ({failedWakeUps.length}): Hab.{' '}
+                  {failedWakeUps.map((w) => w.roomNumber).join(', ')} → Verificar en puerta
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Main Viewport */}
         <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">{children}</main>

@@ -33,7 +33,14 @@ export type ModuleId =
   | 'seguridad_autorizacion'
   | 'contabilidad'
   | 'servicios_pagos'
-  | 'soporte';
+  | 'soporte'
+  | 'crm_whatsapp'
+  | 'despertador_pbx'
+  | 'paquetes_tours'
+  | 'kds_cocina'
+  | 'bell_boys'
+  | 'salud_emergencias'
+  | 'grms_iot';
 
 export type RoomStatus =
   | 'DISPONIBLE'
@@ -95,6 +102,12 @@ export interface Guest {
   celular: string;
   direccion: string;
   esVip: boolean;
+  idiomaPreferido?: 'ES' | 'EN' | 'DE' | 'JP' | 'FR' | 'PT';
+  alergias?: string;
+  condicionesMedicas?: string;
+  horaDespertadorHabitual?: string;
+  preferenciasHabitacion?: string;
+  biometriaVerificada?: boolean;
 }
 
 export interface Agency {
@@ -558,4 +571,235 @@ export interface PMSState {
   activeShiftId: string;
   authCodes: AuthCode[];
   supportTickets: SupportTicket[];
+  wakeUpCalls: WakeUpCall[];
+  tourPackages: TourPackage[];
+  tourBookings: TourBooking[];
+  crmThreads: CrmThread[];
+  roomServiceOrders: RoomServiceOrder[];
+  bellBoyTickets: BellBoyTicket[];
+  transfers: AirportTransfer[];
+  medicalAlerts: MedicalAlert[];
+  roomDevices: RoomDeviceState[];
+  acsAccessLogs: AcsAccessLog[];
 }
+
+export type GuestLanguage = 'ES' | 'EN' | 'DE' | 'JP' | 'FR' | 'PT';
+
+export interface WakeUpCall {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  stayId?: string;
+  guestId?: string;
+  guestName: string;
+  horaProgramada: string; // HH:mm
+  fechaProgramada: string; // YYYY-MM-DD
+  canal: 'PBX_TELEFONO' | 'WHATSAPP_BOT' | 'DUAL_PBX_WHATSAPP' | 'ALEXA_NEST';
+  idioma: GuestLanguage;
+  pbxExtension: string;
+  pbxProvider: 'Yeastar' | 'Grandstream' | 'Mitel';
+  status: 'PROGRAMADO' | 'SONANDO' | 'ATENDIDO' | 'POSPUESTO' | 'FALLO_SIN_RESPUESTA';
+  intentos: number;
+  pospuestoMin: number;
+  respuestaHuesped?: string;
+  creadoPor: string;
+  ultimaEjecucion?: string;
+}
+
+export interface TourPackage {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria: 'TOUR_CUSCO' | 'AVENTURA' | 'SPA_BIENESTAR' | 'TRASLADO_VIP';
+  duracion: string;
+  precioPorPax: number;
+  cuposDia: number;
+  operadorAliado: string;
+  horarioSalida: string;
+  incluye: string[];
+  activo: boolean;
+  descripcion: string;
+}
+
+export interface TourBooking {
+  id: string;
+  codigo: string;
+  packageId: string;
+  packageName: string;
+  stayId?: string;
+  roomId?: string;
+  roomNumber?: string;
+  guestId?: string;
+  guestName: string;
+  guestDoc?: string;
+  fechaTour: string;
+  horaRecojo: string;
+  pax: number;
+  precioUnitario: number;
+  total: number;
+  cargadoAHabitacion: boolean;
+  pagado: boolean;
+  metodoPago?: PaymentMethodName;
+  status: 'CONFIRMADA' | 'EN_CURSO' | 'COMPLETADA' | 'CANCELADA';
+  solicitadoVia: 'RECEPCION' | 'AGENTE_WHATSAPP' | 'WEB';
+  observaciones: string;
+}
+
+export type CrmActionTag =
+  | 'WAKEUP'
+  | 'LATE_CHECKOUT'
+  | 'TOUR'
+  | 'ROOM_SERVICE'
+  | 'BELL_BOY'
+  | 'MEDICAL_SOS'
+  | 'DIGITAL_KEY'
+  | 'PRE_CHECKIN';
+
+export interface CrmMessage {
+  id: string;
+  sender: 'GUEST' | 'AGENT_AI' | 'STAFF';
+  textoOriginal: string;
+  textoTraducidoEs?: string;
+  idioma: GuestLanguage;
+  timestamp: string;
+  actionTag?: CrmActionTag;
+}
+
+export interface CrmThread {
+  id: string;
+  guestId?: string;
+  guestName: string;
+  telefono: string;
+  canal: 'WHATSAPP' | 'INSTAGRAM' | 'WEB' | 'SMS';
+  idiomaHuesped: GuestLanguage;
+  roomId?: string;
+  roomNumber?: string;
+  stayId?: string;
+  reservationId?: string;
+  preCheckInBiometrico: 'NO_ENVIADO' | 'PENDIENTE' | 'VERIFICADO';
+  llaveMovilCodigo?: string;
+  llaveMovilActiva: boolean;
+  llaveExpira?: string;
+  ultimoMensaje: string;
+  updatedAt: string;
+  unreadCount: number;
+  messages: CrmMessage[];
+}
+
+export interface RoomServiceItem {
+  productId: string;
+  descripcion: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+
+export interface RoomServiceOrder {
+  id: string;
+  codigo: string;
+  stayId: string;
+  roomId: string;
+  roomNumber: string;
+  guestName: string;
+  alergiasAlert?: string;
+  canal: 'QR_HABITACION' | 'WHATSAPP_BOT' | 'SMART_TV' | 'RECEPCION';
+  items: RoomServiceItem[];
+  total: number;
+  pagado: boolean;
+  status:
+    | 'PENDIENTE'
+    | 'EN_PREPARACION'
+    | 'LISTO'
+    | 'ENTREGADO'
+    | 'BANDEJA_POR_RECOGER'
+    | 'FINALIZADO';
+  notasCocina: string;
+  createdAt: string;
+  readyAt?: string;
+  whatsappNotificado: boolean;
+}
+
+export interface BellBoyTicket {
+  id: string;
+  codigoQr: string;
+  tipo: 'BAJADA_MALETAS' | 'SUBIDA_CHECKIN' | 'GUARDAEQUIPAJE';
+  roomId?: string;
+  roomNumber?: string;
+  stayId?: string;
+  reservationId?: string;
+  guestName: string;
+  bultos: number;
+  ubicacionRack?: string;
+  descripcionEquipaje: string;
+  asignadoA?: string;
+  origen: 'WHATSAPP_QR' | 'RECEPCION';
+  status: 'PENDIENTE' | 'EN_CAMINO' | 'RESGUARDADO' | 'ENTREGADO';
+  createdAt: string;
+}
+
+export interface AirportTransfer {
+  id: string;
+  codigo: string;
+  tipo: 'PICK_UP' | 'DROP_OFF';
+  guestName: string;
+  roomNumber?: string;
+  vuelo: string;
+  aerolinea: string;
+  horaProgramada: string;
+  horaActualizada: string;
+  retrasoMin: number;
+  chofer: string;
+  vehiculo: string;
+  pax: number;
+  status: 'PROGRAMADO' | 'VUELO_RETRASADO' | 'EN_RUTA' | 'COMPLETADO';
+}
+
+export interface MedicalAlert {
+  id: string;
+  codigo: string;
+  roomId: string;
+  roomNumber: string;
+  stayId?: string;
+  guestId?: string;
+  guestName: string;
+  tipo: 'OXIGENO' | 'MEDICO_HABITACION' | 'TELEMEDICINA' | 'EMERGENCIA_CRITICA';
+  prioridad: 'ALTA' | 'CRITICA';
+  origen: 'TELEFONO_HABITACION' | 'WHATSAPP_SOS' | 'TV_SMART' | 'RECEPCION';
+  alergiasHistorial: string;
+  sintomas: string;
+  asignadoA?: string;
+  cargoServicio: number;
+  status: 'ACTIVA' | 'EN_ATENCION' | 'RESUELTA';
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface RoomDeviceState {
+  roomId: string;
+  roomNumber: string;
+  temperaturaObjetivo: number;
+  temperaturaActual: number;
+  aireModo: 'CONFORT' | 'ECO' | 'APAGADO';
+  luces: 'ENCENDIDAS' | 'TENUE' | 'APAGADAS';
+  cortinas: 'ABIERTAS' | 'CERRADAS';
+  cartelDigital: 'NINGUNO' | 'NO_MOLESTAR' | 'LIMPIAR_AHORA';
+  sensorPresencia: 'CON_HUESPED' | 'VACIA_SIN_MOVIMIENTO';
+  consumoKwh: number;
+  alertaPreventiva?: string;
+  llaveMovilActiva: boolean;
+  llaveMovilCodigo?: string;
+  llaveVigenciaHasta?: string;
+  ultimaActualizacion: string;
+}
+
+export interface AcsAccessLog {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  actor: string;
+  rolActor: 'HUESPED_MOVIL' | 'CAMARERA' | 'MANTENIMIENTO' | 'BELL_BOY' | 'RECEPCION';
+  metodo: 'LLAVE_MOVIL_NFC' | 'TARJETA_MAESTRA' | 'PIN_EMERGENCIA' | 'APERTURA_REMOTA';
+  autorizado: boolean;
+  fecha: string;
+}
+

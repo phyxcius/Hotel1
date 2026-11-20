@@ -1,19 +1,25 @@
 import React, { useMemo, useState } from 'react';
 import {
+  AlarmClock,
   AlertTriangle,
   ArrowRightLeft,
   BedDouble,
   CalendarPlus,
   CheckCircle2,
+  Compass,
   CreditCard,
   Gift,
+  MessageSquare,
   Plus,
   Printer,
   RefreshCw,
   ShoppingBag,
+  Smartphone,
   Sparkles,
+  Stethoscope,
   UserPlus,
   Users,
+  UtensilsCrossed,
   Wrench,
   X,
 } from 'lucide-react';
@@ -59,6 +65,10 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
     saveGuest,
     completeCleaning,
     resolveMaintenance,
+    scheduleWakeUp,
+    ensureCrmThread,
+    toggleMobileKey,
+    triggerMedicalAlert,
     notify,
   } = usePMS();
 
@@ -1243,6 +1253,138 @@ export const RecepcionModule: React.FC<RecepcionModuleProps> = ({ onNavigate }) 
                       </button>
                     </div>
                   )}
+
+                  {/* Ecosistema Smart 360° Quick Actions */}
+                  {(() => {
+                    const activeDevice = state.roomDevices.find((d) => d.roomId === activeStay.roomId);
+                    const activeGuest = state.guests.find((g) => g.id === activeStay.guestId);
+                    return (
+                      <div className="rounded-xl border border-amber-200/80 bg-gradient-to-br from-[#FFFDF7] to-amber-50/40 p-3.5">
+                        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                              Ecosistema Smart 360° · Hab. {activeStay.roomNumber}
+                            </p>
+                            <p className="text-[11px] text-slate-600">
+                              {activeDevice
+                                ? `GRMS ${activeDevice.aireModo} ${activeDevice.temperaturaObjetivo}°C · Llave NFC ${
+                                    activeDevice.llaveMovilActiva
+                                      ? activeDevice.llaveMovilCodigo || 'ACTIVA'
+                                      : 'INACTIVA'
+                                  }`
+                                : 'Accesos directos conectados al perfil CRM y operaciones'}
+                            </p>
+                          </div>
+                          {activeGuest?.alergias && (
+                            <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                              Alergia CRM: {activeGuest.alergias}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tomorrow = toYMD(new Date(Date.now() + 86400000));
+                              scheduleWakeUp({
+                                roomId: activeStay.roomId,
+                                horaProgramada: activeGuest?.horaDespertadorHabitual || '06:30',
+                                fechaProgramada: tomorrow,
+                                canal: 'DUAL_PBX_WHATSAPP',
+                                idioma: activeGuest?.idiomaPreferido || 'ES',
+                                pbxProvider: 'Yeastar',
+                              });
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-amber-50"
+                          >
+                            <AlarmClock className="h-3.5 w-3.5 text-amber-600" />
+                            Despertador {activeGuest?.horaDespertadorHabitual || '06:30'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              ensureCrmThread({
+                                guestId: activeStay.guestId,
+                                guestName: activeStay.guestName,
+                                telefono: activeGuest?.celular,
+                                stayId: activeStay.id,
+                                roomId: activeStay.roomId,
+                                roomNumber: activeStay.roomNumber,
+                                idioma: activeGuest?.idiomaPreferido || 'ES',
+                                canal: 'WHATSAPP',
+                              });
+                              setActiveStayId(null);
+                              onNavigate('crm_whatsapp');
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+                            WhatsApp CRM
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveStayId(null);
+                              onNavigate('paquetes_tours');
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-amber-50"
+                          >
+                            <Compass className="h-3.5 w-3.5 text-amber-700" />
+                            Tours & Spa
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveStayId(null);
+                              onNavigate('kds_cocina');
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-orange-800 hover:bg-orange-50"
+                          >
+                            <UtensilsCrossed className="h-3.5 w-3.5 text-orange-600" />
+                            Cocina KDS
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleMobileKey(
+                                activeStay.roomId,
+                                !(activeDevice?.llaveMovilActiva ?? false),
+                                activeStay.guestName
+                              )
+                            }
+                            className={`flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-semibold ${
+                              activeDevice?.llaveMovilActiva
+                                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Smartphone className="h-3.5 w-3.5" />
+                            {activeDevice?.llaveMovilActiva ? 'NFC Activa' : 'Activar NFC'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerMedicalAlert({
+                                roomId: activeStay.roomId,
+                                tipo: 'OXIGENO',
+                                origen: 'RECEPCION',
+                                sintomas: `Solicitud prioritaria de oxigenoterapia desde Recepción · Hab. ${activeStay.roomNumber}`,
+                              });
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-semibold text-rose-800 hover:bg-rose-100"
+                          >
+                            <Stethoscope className="h-3.5 w-3.5 text-rose-600" />
+                            Oxígeno SOS
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Footer Actions */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">

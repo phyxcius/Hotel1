@@ -14,18 +14,26 @@ import {
   testFirebaseConnection,
 } from '../services/firebaseRtdb';
 import type {
+  AcsAccessLog,
   Agency,
   AgencyGroup,
+  AirportTransfer,
   AttendanceLog,
   AuthCode,
   BankDeposit,
+  BellBoyTicket,
   CleaningLog,
+  CrmActionTag,
+  CrmMessage,
+  CrmThread,
   DayKey,
   Employee,
   ExpenseRecord,
   Guest,
+  GuestLanguage,
   HotelConfig,
   MaintenanceRecord,
+  MedicalAlert,
   ModuleId,
   PaymentMethodName,
   PersonaNoGrata,
@@ -38,15 +46,21 @@ import type {
   ReservationStatus,
   Room,
   RoomAmenities,
+  RoomDeviceState,
+  RoomServiceOrder,
   RoomStatus,
   RoomType,
   SaleRecord,
   StaffPosition,
   Stay,
+  StayConsumption,
   StayPayment,
   SupportTicket,
   SystemUser,
+  TourBooking,
+  TourPackage,
   VoucherType,
+  WakeUpCall,
   WarehouseArea,
 } from '../types/pms';
 
@@ -257,6 +271,137 @@ interface PMSContextValue {
   saveAuthCode: (code: Omit<AuthCode, 'id'>) => void;
   deleteAuthCode: (id: string) => void;
   createSupportTicket: (incidencia: string, detalle: string) => void;
+
+  // Smart Wake-Up (PBX + WhatsApp + Voice IoT)
+  scheduleWakeUp: (payload: {
+    roomId: string;
+    horaProgramada: string;
+    fechaProgramada: string;
+    canal: WakeUpCall['canal'];
+    idioma?: GuestLanguage;
+    pbxProvider?: WakeUpCall['pbxProvider'];
+    creadoPor?: string;
+  }) => WakeUpCall | null;
+  triggerWakeUpCall: (id: string) => void;
+  respondWakeUpCall: (
+    id: string,
+    outcome: 'ATENDIDO' | 'POSPUESTO' | 'FALLO_SIN_RESPUESTA',
+    extraMin?: number
+  ) => void;
+  deleteWakeUpCall: (id: string) => void;
+
+  // Tour Packages & Spa Bookings
+  saveTourPackage: (pkg: Omit<TourPackage, 'id'> & { id?: string }) => TourPackage;
+  bookTourPackage: (payload: {
+    packageId: string;
+    stayId?: string;
+    guestId?: string;
+    guestName: string;
+    guestDoc?: string;
+    roomId?: string;
+    roomNumber?: string;
+    fechaTour: string;
+    horaRecojo?: string;
+    pax: number;
+    chargeToRoom: boolean;
+    metodoPago?: PaymentMethodName;
+    voucherType?: VoucherType;
+    solicitadoVia?: TourBooking['solicitadoVia'];
+    observaciones?: string;
+  }) => TourBooking | null;
+  updateTourBookingStatus: (id: string, status: TourBooking['status']) => void;
+
+  // CRM Omnichannel & WhatsApp AI Agent
+  ensureCrmThread: (params: {
+    guestId?: string;
+    guestName: string;
+    telefono?: string;
+    stayId?: string;
+    roomId?: string;
+    roomNumber?: string;
+    idioma?: GuestLanguage;
+    canal?: CrmThread['canal'];
+  }) => CrmThread;
+  sendCrmMessage: (
+    threadId: string,
+    texto: string,
+    sender?: CrmMessage['sender'],
+    actionTag?: CrmActionTag
+  ) => void;
+  simulateGuestCrmCommand: (
+    threadId: string,
+    commandType:
+      | 'WAKEUP'
+      | 'LATE_CHECKOUT'
+      | 'TOUR'
+      | 'ROOM_SERVICE'
+      | 'BELL_BOY'
+      | 'MEDICAL_SOS'
+      | 'CUSTOM',
+    params?: {
+      customText?: string;
+      wakeTime?: string;
+      tourPackageId?: string;
+      tourPax?: number;
+      productId?: string;
+      bultos?: number;
+      medicalType?: MedicalAlert['tipo'];
+    }
+  ) => void;
+  sendBiometricPreCheckIn: (threadId: string) => void;
+  verifyBiometricAndIssueKey: (threadId: string) => void;
+  approveLateCheckOutFromCrm: (
+    threadId: string,
+    extraHours: number,
+    extraFee: number,
+    chargeToFolio: boolean
+  ) => void;
+
+  // Room Service & KDS Cocina
+  createRoomServiceOrder: (payload: {
+    stayId: string;
+    items: { productId: string; cantidad: number }[];
+    canal: RoomServiceOrder['canal'];
+    notasCocina?: string;
+    pagarAhora?: boolean;
+    metodoPago?: PaymentMethodName;
+    voucherType?: VoucherType;
+  }) => RoomServiceOrder | null;
+  advanceKdsOrderStatus: (orderId: string, nextStatus: RoomServiceOrder['status']) => void;
+
+  // Bell Boys & Transfers
+  createBellBoyTicket: (
+    payload: Omit<BellBoyTicket, 'id' | 'codigoQr' | 'createdAt' | 'status'> & {
+      status?: BellBoyTicket['status'];
+    }
+  ) => BellBoyTicket;
+  updateBellBoyStatus: (id: string, status: BellBoyTicket['status'], asignadoA?: string) => void;
+  createTransfer: (
+    payload: Omit<AirportTransfer, 'id' | 'codigo' | 'horaActualizada' | 'retrasoMin' | 'status'>
+  ) => AirportTransfer;
+  reportFlightDelay: (id: string, delayMinutes: number) => void;
+  updateTransferStatus: (id: string, status: AirportTransfer['status']) => void;
+
+  // Medical, Oxygen & Emergency
+  triggerMedicalAlert: (payload: {
+    roomId: string;
+    tipo: MedicalAlert['tipo'];
+    origen: MedicalAlert['origen'];
+    sintomas: string;
+    cargoServicio?: number;
+  }) => MedicalAlert | null;
+  updateMedicalAlertStatus: (
+    id: string,
+    status: MedicalAlert['status'],
+    asignadoA?: string,
+    cargoServicio?: number
+  ) => void;
+
+  // GRMS Domotics & ACS Access Control
+  updateRoomDevice: (roomId: string, partial: Partial<RoomDeviceState>) => void;
+  toggleMobileKey: (roomId: string, active: boolean, actorName?: string) => void;
+  logAcsAccess: (payload: Omit<AcsAccessLog, 'id' | 'fecha'>) => void;
+  reportPreventiveIoTMaintenance: (roomId: string, detalle: string) => void;
 }
 
 const PMSContext = createContext<PMSContextValue | null>(null);
@@ -276,7 +421,7 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...parsed,
             users: parsed.users.map((u) => {
               if (u.rol === 'ADMINISTRADOR') return { ...u, accesos: ALL_MODULES };
-              if (u.rol === 'RECEPCION' && u.accesos.length >= ALL_MODULES.length - 2) {
+              if (u.rol === 'RECEPCION' && (!u.accesos.includes('crm_whatsapp') || u.accesos.length >= ALL_MODULES.length - 2)) {
                 return { ...u, accesos: RECEPTION_OPERATIONAL_MODULES };
               }
               return u;
@@ -335,7 +480,7 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...incoming,
       users: incoming.users.map((u) => {
         if (u.rol === 'ADMINISTRADOR') return { ...u, accesos: ALL_MODULES };
-        if (u.rol === 'RECEPCION' && u.accesos.length >= ALL_MODULES.length - 2) {
+        if (u.rol === 'RECEPCION' && (!u.accesos.includes('crm_whatsapp') || u.accesos.length >= ALL_MODULES.length - 2)) {
           return { ...u, accesos: RECEPTION_OPERATIONAL_MODULES };
         }
         return u;
@@ -661,6 +806,27 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         employees: options.wipeStaff ? [] : prev.employees,
         users: options.wipeStaff && adminUser ? [adminUser] : prev.users,
         activeUserId: adminUser?.id || prev.activeUserId,
+        wakeUpCalls: options.wipeTransactions ? [] : prev.wakeUpCalls,
+        tourBookings: options.wipeTransactions ? [] : prev.tourBookings,
+        crmThreads: options.wipeTransactions ? [] : prev.crmThreads,
+        roomServiceOrders: options.wipeTransactions ? [] : prev.roomServiceOrders,
+        bellBoyTickets: options.wipeTransactions ? [] : prev.bellBoyTickets,
+        transfers: options.wipeTransactions ? [] : prev.transfers,
+        medicalAlerts: options.wipeTransactions ? [] : prev.medicalAlerts,
+        acsAccessLogs: options.wipeTransactions ? [] : prev.acsAccessLogs,
+        roomDevices: options.wipeTransactions
+          ? prev.roomDevices.map((d) => ({
+              ...d,
+              aireModo: 'ECO' as const,
+              luces: 'APAGADAS' as const,
+              cortinas: 'CERRADAS' as const,
+              cartelDigital: 'NINGUNO' as const,
+              sensorPresencia: 'VACIA_SIN_MOVIMIENTO' as const,
+              llaveMovilActiva: false,
+              llaveMovilCodigo: undefined,
+              llaveVigenciaHasta: undefined,
+            }))
+          : prev.roomDevices,
       };
     });
 
@@ -788,6 +954,9 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         : null;
 
+    const newKeyCode = `NFC-${room.numero}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const vigenciaStr = `${toYMD(salida)} ${state.config.horaCheckOut}`;
+
     setState((prev) => ({
       ...prev,
       stays: [newStay, ...prev.stays],
@@ -800,9 +969,44 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             res.id === payload.reservationId ? { ...res, status: 'CHECKED_IN' } : res
           )
         : prev.reservations,
+      roomDevices: prev.roomDevices.map((d) =>
+        d.roomId === room.id
+          ? {
+              ...d,
+              aireModo: 'CONFORT',
+              temperaturaObjetivo: 21,
+              temperaturaActual: 21,
+              luces: 'ENCENDIDAS',
+              cortinas: 'ABIERTAS',
+              cartelDigital: 'NINGUNO',
+              sensorPresencia: 'CON_HUESPED',
+              llaveMovilActiva: true,
+              llaveMovilCodigo: newKeyCode,
+              llaveVigenciaHasta: vigenciaStr,
+              ultimaActualizacion: now.toISOString(),
+            }
+          : d
+      ),
+      acsAccessLogs: [
+        {
+          id: genId('acs'),
+          roomId: room.id,
+          roomNumber: room.numero,
+          actor: guest.nombres,
+          rolActor: 'HUESPED_MOVIL',
+          metodo: 'LLAVE_MOVIL_NFC',
+          autorizado: true,
+          fecha: now.toISOString(),
+        },
+        ...prev.acsAccessLogs,
+      ],
     }));
 
-    notify('success', `Check-In Hab. ${room.numero} completado`, `${guest.nombres} registrado correctamente.`);
+    notify(
+      'success',
+      `Check-In Hab. ${room.numero} completado`,
+      `${guest.nombres} · GRMS Confort + Llave Móvil ${newKeyCode} activada.`
+    );
     return newStay;
   };
 
@@ -1268,6 +1472,8 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const comprobante = nextVoucherNumber(state.sales, voucherType, state.config);
 
+    const nextVigencia = `${toYMD(nextExit)} ${state.config.horaCheckOut}`;
+
     setState((prev) => ({
       ...prev,
       stays: prev.stays.map((s) => {
@@ -1302,6 +1508,14 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           saldoPendiente: Math.max(0, totalCargos - totalPagado),
         };
       }),
+      roomDevices: prev.roomDevices.map((d) =>
+        d.roomId === stay.roomId
+          ? { ...d, llaveVigenciaHasta: nextVigencia, ultimaActualizacion: now }
+          : d
+      ),
+      crmThreads: prev.crmThreads.map((t) =>
+        t.stayId === stayId ? { ...t, llaveExpira: nextVigencia } : t
+      ),
       sales: pagarAhora
         ? [
             {
@@ -1328,7 +1542,11 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : prev.sales,
     }));
 
-    notify('success', `Estadía Hab. ${stay.roomNumber} renovada`, `+${cantidad} ${modalidad.toLowerCase()}`);
+    notify(
+      'success',
+      `Estadía Hab. ${stay.roomNumber} renovada`,
+      `+${cantidad} ${modalidad.toLowerCase()} · Llave digital extendida automáticamente`
+    );
   };
 
   const payStayBalance = (
@@ -1406,7 +1624,13 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const rt = state.roomTypes.find((t) => t.id === targetRoom.roomTypeId);
+    const rtFound = state.roomTypes.find((t) => t.id === targetRoom.roomTypeId);
+    const now = new Date().toISOString();
+    const oldDevice = state.roomDevices.find((d) => d.roomId === stay.roomId);
+    const newKeyCode = `NFC-${targetRoom.numero}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const vigenciaStr =
+      oldDevice?.llaveVigenciaHasta ||
+      `${stay.fechaSalidaProgramada.slice(0, 10)} ${state.config.horaCheckOut}`;
 
     setState((prev) => ({
       ...prev,
@@ -1421,19 +1645,75 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...s,
               roomId: targetRoom.id,
               roomNumber: targetRoom.numero,
-              roomTypeName: rt?.nombre || s.roomTypeName,
+              roomTypeName: rtFound?.nombre || s.roomTypeName,
               observaciones: `${s.observaciones} [Cambio de Hab. ${stay.roomNumber} -> ${targetRoom.numero}${s.groupName ? ` · Mantiene Grupo ${s.groupName}` : ''}]`.trim(),
             }
           : s
       ),
+      roomDevices: prev.roomDevices.map((d) => {
+        if (d.roomId === stay.roomId) {
+          return {
+            ...d,
+            aireModo: 'ECO',
+            luces: 'APAGADAS',
+            cortinas: 'CERRADAS',
+            cartelDigital: 'LIMPIAR_AHORA',
+            sensorPresencia: 'VACIA_SIN_MOVIMIENTO',
+            llaveMovilActiva: false,
+            llaveMovilCodigo: undefined,
+            llaveVigenciaHasta: undefined,
+            ultimaActualizacion: now,
+          };
+        }
+        if (d.roomId === targetRoom.id) {
+          return {
+            ...d,
+            aireModo: 'CONFORT',
+            temperaturaObjetivo: 21,
+            temperaturaActual: 21,
+            luces: 'ENCENDIDAS',
+            cortinas: 'ABIERTAS',
+            cartelDigital: 'NINGUNO',
+            sensorPresencia: 'CON_HUESPED',
+            llaveMovilActiva: true,
+            llaveMovilCodigo: newKeyCode,
+            llaveVigenciaHasta: vigenciaStr,
+            ultimaActualizacion: now,
+          };
+        }
+        return d;
+      }),
+      crmThreads: prev.crmThreads.map((t) =>
+        t.stayId === stay.id
+          ? {
+              ...t,
+              roomId: targetRoom.id,
+              roomNumber: targetRoom.numero,
+              llaveMovilActiva: true,
+            }
+          : t
+      ),
+      acsAccessLogs: [
+        {
+          id: genId('acs'),
+          roomId: targetRoom.id,
+          roomNumber: targetRoom.numero,
+          actor: stay.guestName,
+          rolActor: 'HUESPED_MOVIL',
+          metodo: 'LLAVE_MOVIL_NFC',
+          autorizado: true,
+          fecha: now,
+        },
+        ...prev.acsAccessLogs,
+      ],
     }));
 
     notify(
       'success',
       `Cambio de habitación realizado`,
       stay.groupName
-        ? `Hab. ${targetRoom.numero} asignada manteniendo grupo ${stay.groupName} (${stay.agencyName || 'Agencia'})`
-        : `Huésped movido a Hab. ${targetRoom.numero}`
+        ? `Hab. ${targetRoom.numero} asignada manteniendo grupo ${stay.groupName} (${stay.agencyName || 'Agencia'}) · Llave ${newKeyCode}`
+        : `Huésped movido a Hab. ${targetRoom.numero} · Llave NFC ${newKeyCode} transferida`
     );
   };
 
@@ -1490,6 +1770,25 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rooms: prev.rooms.map((r) =>
         r.id === stay.roomId ? { ...r, status: 'EN_LIMPIEZA', currentStayId: undefined } : r
       ),
+      roomDevices: prev.roomDevices.map((d) =>
+        d.roomId === stay.roomId
+          ? {
+              ...d,
+              aireModo: 'ECO',
+              luces: 'APAGADAS',
+              cortinas: 'CERRADAS',
+              cartelDigital: 'LIMPIAR_AHORA',
+              sensorPresencia: 'VACIA_SIN_MOVIMIENTO',
+              llaveMovilActiva: false,
+              llaveMovilCodigo: undefined,
+              llaveVigenciaHasta: undefined,
+              ultimaActualizacion: now,
+            }
+          : d
+      ),
+      crmThreads: prev.crmThreads.map((t) =>
+        t.stayId === stayId ? { ...t, llaveMovilActiva: false } : t
+      ),
       sales: pagoFinal
         ? [
             {
@@ -1519,7 +1818,7 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify(
       'success',
       `Check-Out Hab. ${stay.roomNumber} completado`,
-      'Habitación enviada automáticamente a Control de Limpieza.'
+      'Habitación enviada a Limpieza, GRMS en modo ahorro ECO y llave móvil revocada.'
     );
     return true;
   };
@@ -2221,6 +2520,1062 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('success', `Ticket ${ticket.numeroTicket} enviado`);
   };
 
+  // ============================================================
+  // MODERN SMART HOSPITALITY ECOSYSTEM METHODS
+  // ============================================================
+
+  const translateTextPreview = (textEs: string, lang: GuestLanguage): string => {
+    if (lang === 'ES') return textEs;
+    const prefix: Record<GuestLanguage, string> = {
+      ES: '',
+      EN: '[EN Auto-Translated] ',
+      DE: '[DE Auto-Übersetzt] ',
+      JP: '[JP 自動翻訳] ',
+      FR: '[FR Traduit] ',
+      PT: '[PT Traduzido] ',
+    };
+    return `${prefix[lang]}${textEs}`;
+  };
+
+  // 1. Smart Wake-Up (PBX + WhatsApp + Voice IoT)
+  const scheduleWakeUp: PMSContextValue['scheduleWakeUp'] = (payload) => {
+    const room = state.rooms.find((r) => r.id === payload.roomId);
+    if (!room) return null;
+    const stay = state.stays.find((s) => s.roomId === room.id && s.status === 'ACTIVA');
+    const guest = stay ? state.guests.find((g) => g.id === stay.guestId) : undefined;
+    const item: WakeUpCall = {
+      id: genId('wu'),
+      roomId: room.id,
+      roomNumber: room.numero,
+      stayId: stay?.id,
+      guestId: guest?.id,
+      guestName: stay?.guestName || `HUÉSPED HAB. ${room.numero}`,
+      horaProgramada: payload.horaProgramada,
+      fechaProgramada: payload.fechaProgramada,
+      canal: payload.canal,
+      idioma: payload.idioma || guest?.idiomaPreferido || 'ES',
+      pbxExtension: room.numero,
+      pbxProvider: payload.pbxProvider || 'Yeastar',
+      status: 'PROGRAMADO',
+      intentos: 0,
+      pospuestoMin: 0,
+      creadoPor: payload.creadoPor || activeUser.username,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      wakeUpCalls: [item, ...prev.wakeUpCalls],
+      guests: guest
+        ? prev.guests.map((g) =>
+            g.id === guest.id ? { ...g, horaDespertadorHabitual: payload.horaProgramada } : g
+          )
+        : prev.guests,
+    }));
+    notify(
+      'success',
+      `Despertador Hab. ${room.numero} programado`,
+      `${payload.horaProgramada} · Canal: ${payload.canal.replace(/_/g, ' ')}`
+    );
+    return item;
+  };
+
+  const triggerWakeUpCall = (id: string) => {
+    const now = new Date().toISOString();
+    const target = state.wakeUpCalls.find((w) => w.id === id);
+    if (!target) return;
+    setState((prev) => ({
+      ...prev,
+      wakeUpCalls: prev.wakeUpCalls.map((w) =>
+        w.id === id
+          ? { ...w, status: 'SONANDO', intentos: w.intentos + 1, ultimaEjecucion: now }
+          : w
+      ),
+    }));
+    notify(
+      'info',
+      `Ejecutando despertador Hab. ${target.roomNumber}`,
+      `Timbrando extensión PBX ${target.pbxExtension} (${target.pbxProvider}) y WhatsApp Bot`
+    );
+  };
+
+  const respondWakeUpCall = (
+    id: string,
+    outcome: 'ATENDIDO' | 'POSPUESTO' | 'FALLO_SIN_RESPUESTA',
+    extraMin = 10
+  ) => {
+    const target = state.wakeUpCalls.find((w) => w.id === id);
+    if (!target) return;
+
+    const shiftHHMM = (hhmm: string, mins: number) => {
+      const [h, m] = hhmm.split(':').map(Number);
+      const tot = ((h || 0) * 60 + (m || 0) + mins) % (24 * 60);
+      return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+    };
+
+    setState((prev) => ({
+      ...prev,
+      wakeUpCalls: prev.wakeUpCalls.map((w) => {
+        if (w.id !== id) return w;
+        if (outcome === 'POSPUESTO') {
+          return {
+            ...w,
+            status: 'POSPUESTO',
+            pospuestoMin: w.pospuestoMin + extraMin,
+            horaProgramada: shiftHHMM(w.horaProgramada, extraMin),
+            respuestaHuesped: `Pospuesto +${extraMin} min por huésped`,
+          };
+        }
+        return {
+          ...w,
+          status: outcome,
+          respuestaHuesped:
+            outcome === 'ATENDIDO'
+              ? 'Confirmado ("Sí, gracias")'
+              : 'Sin respuesta tras 5 timbres PBX - Requiere verificación en puerta',
+        };
+      }),
+    }));
+
+    if (outcome === 'FALLO_SIN_RESPUESTA') {
+      notify(
+        'error',
+        `ALERTA ROJA DESPERTADOR · Hab. ${target.roomNumber}`,
+        'Huésped no contestó el teléfono PBX ni WhatsApp. Enviar agente a tocar la puerta.'
+      );
+    } else if (outcome === 'POSPUESTO') {
+      notify('warning', `Despertador Hab. ${target.roomNumber} pospuesto +${extraMin} min`);
+    } else {
+      notify('success', `Despertador Hab. ${target.roomNumber} atendido por el huésped`);
+    }
+  };
+
+  const deleteWakeUpCall = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      wakeUpCalls: prev.wakeUpCalls.filter((w) => w.id !== id),
+    }));
+  };
+
+  // 2. Tour Packages & Spa Bookings
+  const saveTourPackage: PMSContextValue['saveTourPackage'] = (pkg) => {
+    const saved: TourPackage = pkg.id
+      ? { ...pkg, id: pkg.id }
+      : { ...pkg, id: genId('pkg') };
+    setState((prev) => ({
+      ...prev,
+      tourPackages: pkg.id
+        ? prev.tourPackages.map((p) => (p.id === pkg.id ? saved : p))
+        : [saved, ...prev.tourPackages],
+    }));
+    notify('success', 'Paquete turístico guardado', saved.nombre);
+    return saved;
+  };
+
+  const bookTourPackage: PMSContextValue['bookTourPackage'] = (payload) => {
+    const pkg = state.tourPackages.find((p) => p.id === payload.packageId);
+    if (!pkg) return null;
+
+    const now = new Date().toISOString();
+    const total = Math.max(0, pkg.precioPorPax * Math.max(1, payload.pax));
+    const bookingId = genId('tb');
+    const codigo = `EXP-${Math.floor(1000 + Math.random() * 8999)}`;
+    const stay = payload.stayId
+      ? state.stays.find((s) => s.id === payload.stayId && s.status === 'ACTIVA')
+      : undefined;
+
+    const paidDirect = !payload.chargeToRoom && payload.metodoPago && payload.metodoPago !== 'X PAGAR';
+    const vType: VoucherType = payload.voucherType || 'BOLETA';
+    const comprobante = paidDirect ? nextVoucherNumber(state.sales, vType, state.config) : '';
+
+    const newBooking: TourBooking = {
+      id: bookingId,
+      codigo,
+      packageId: pkg.id,
+      packageName: pkg.nombre,
+      stayId: stay?.id,
+      roomId: stay?.roomId || payload.roomId,
+      roomNumber: stay?.roomNumber || payload.roomNumber,
+      guestId: stay?.guestId || payload.guestId,
+      guestName: payload.guestName || stay?.guestName || 'HUÉSPED',
+      guestDoc: payload.guestDoc || stay?.guestDocNum,
+      fechaTour: payload.fechaTour,
+      horaRecojo: payload.horaRecojo || pkg.horarioSalida,
+      pax: Math.max(1, payload.pax),
+      precioUnitario: pkg.precioPorPax,
+      total,
+      cargadoAHabitacion: Boolean(stay && payload.chargeToRoom),
+      pagado: Boolean(paidDirect),
+      metodoPago: paidDirect ? payload.metodoPago : payload.chargeToRoom ? 'X PAGAR' : undefined,
+      status: 'CONFIRMADA',
+      solicitadoVia: payload.solicitadoVia || 'RECEPCION',
+      observaciones: payload.observaciones || '',
+    };
+
+    const consumptionForStay: StayConsumption | null =
+      stay && payload.chargeToRoom
+        ? {
+            id: genId('con'),
+            productId: pkg.id,
+            descripcion: `TOUR/SPA: ${pkg.nombre} (${newBooking.pax} pax · ${payload.fechaTour})`,
+            cantidad: newBooking.pax,
+            precioUnitario: pkg.precioPorPax,
+            subtotal: total,
+            fecha: now,
+            pagado: false,
+            entregado: true,
+          }
+        : null;
+
+    const newSale: SaleRecord | null = paidDirect
+      ? {
+          id: genId('sale'),
+          fecha: now,
+          origenTipo: stay ? 'HABITACION' : 'VENTA_LIBRE',
+          roomNumber: stay?.roomNumber || payload.roomNumber,
+          guestName: newBooking.guestName,
+          guestDoc: newBooking.guestDoc,
+          descripcion: `Paquete Turístico ${codigo}: ${pkg.nombre} (${newBooking.pax} pax)`,
+          metodoPago: payload.metodoPago!,
+          voucherType: vType,
+          comprobante,
+          monto: total,
+          esCortesia: payload.metodoPago === 'PAX LIBRES',
+          turno: activeShiftName,
+          responsable: activeUser.username,
+          status: 'ACTIVO',
+          sunatEnviado: state.config.sunafactActivo,
+          stayId: stay?.id,
+        }
+      : null;
+
+    setState((prev) => ({
+      ...prev,
+      tourBookings: [newBooking, ...prev.tourBookings],
+      stays:
+        stay && consumptionForStay
+          ? prev.stays.map((s) => {
+              if (s.id !== stay.id) return s;
+              const nextTotalCargos = s.totalCargos + total;
+              return {
+                ...s,
+                consumptions: [...s.consumptions, consumptionForStay],
+                totalCargos: nextTotalCargos,
+                saldoPendiente: Math.max(0, nextTotalCargos - s.totalPagado),
+              };
+            })
+          : prev.stays,
+      sales: newSale ? [newSale, ...prev.sales] : prev.sales,
+    }));
+
+    notify(
+      'success',
+      `Reserva Tour ${codigo} confirmada`,
+      stay && payload.chargeToRoom
+        ? `Cargado a cuenta Hab. ${stay.roomNumber} (S/ ${total.toFixed(2)})`
+        : paidDirect
+          ? `Cobrado con ${comprobante}`
+          : `${pkg.nombre} (${newBooking.pax} pax)`
+    );
+    return newBooking;
+  };
+
+  const updateTourBookingStatus = (id: string, status: TourBooking['status']) => {
+    setState((prev) => ({
+      ...prev,
+      tourBookings: prev.tourBookings.map((b) => (b.id === id ? { ...b, status } : b)),
+    }));
+    notify('info', `Reserva turística actualizada a ${status}`);
+  };
+
+  // 3. CRM Omnichannel & WhatsApp AI Agent
+  const ensureCrmThread: PMSContextValue['ensureCrmThread'] = (params) => {
+    const existing = state.crmThreads.find(
+      (t) =>
+        (params.stayId && t.stayId === params.stayId) ||
+        (params.guestId && t.guestId === params.guestId)
+    );
+    if (existing) return existing;
+
+    const guest = params.guestId ? state.guests.find((g) => g.id === params.guestId) : undefined;
+    const now = new Date().toISOString();
+    const newThread: CrmThread = {
+      id: genId('crm'),
+      guestId: params.guestId,
+      guestName: params.guestName,
+      telefono: params.telefono || guest?.celular || '+51 984 000 100',
+      canal: params.canal || 'WHATSAPP',
+      idiomaHuesped: params.idioma || guest?.idiomaPreferido || 'ES',
+      roomId: params.roomId,
+      roomNumber: params.roomNumber,
+      stayId: params.stayId,
+      preCheckInBiometrico: guest?.biometriaVerificada ? 'VERIFICADO' : 'NO_ENVIADO',
+      llaveMovilActiva: Boolean(params.roomId),
+      llaveMovilCodigo: params.roomNumber ? `NFC-${params.roomNumber}-${Math.floor(1000 + Math.random() * 8999)}` : undefined,
+      ultimoMensaje: 'Canal WhatsApp CRM iniciado',
+      updatedAt: now,
+      unreadCount: 0,
+      messages: [],
+    };
+    setState((prev) => ({ ...prev, crmThreads: [newThread, ...prev.crmThreads] }));
+    return newThread;
+  };
+
+  const sendCrmMessage: PMSContextValue['sendCrmMessage'] = (
+    threadId,
+    texto,
+    sender = 'STAFF',
+    actionTag
+  ) => {
+    const thread = state.crmThreads.find((t) => t.id === threadId);
+    if (!thread || !texto.trim()) return;
+    const now = new Date().toISOString();
+    const translated = sender === 'GUEST' ? texto : translateTextPreview(texto, thread.idiomaHuesped);
+    const msg: CrmMessage = {
+      id: genId('msg'),
+      sender,
+      textoOriginal: sender === 'GUEST' ? texto : translated,
+      textoTraducidoEs: texto,
+      idioma: thread.idiomaHuesped,
+      timestamp: now,
+      actionTag,
+    };
+    setState((prev) => ({
+      ...prev,
+      crmThreads: prev.crmThreads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              messages: [...t.messages, msg],
+              ultimoMensaje: texto,
+              updatedAt: now,
+              unreadCount: sender === 'GUEST' ? t.unreadCount + 1 : 0,
+            }
+          : t
+      ),
+    }));
+  };
+
+  const sendBiometricPreCheckIn = (threadId: string) => {
+    const thread = state.crmThreads.find((t) => t.id === threadId);
+    if (!thread) return;
+    const now = new Date().toISOString();
+    const msgEs = `Hola ${thread.guestName.split(' ')[0]}, completa tu Pre-Check-In biométrico (DNI/Pasaporte + selfie) aquí para activar tu Llave Digital NFC sin filas: https://checkin.lachuspatech.com/${thread.id}`;
+    setState((prev) => ({
+      ...prev,
+      crmThreads: prev.crmThreads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              preCheckInBiometrico: 'PENDIENTE',
+              ultimoMensaje: 'Enlace Pre-Check-In biométrico enviado',
+              updatedAt: now,
+              messages: [
+                ...t.messages,
+                {
+                  id: genId('msg'),
+                  sender: 'AGENT_AI',
+                  textoOriginal: translateTextPreview(msgEs, t.idiomaHuesped),
+                  textoTraducidoEs: msgEs,
+                  idioma: t.idiomaHuesped,
+                  timestamp: now,
+                  actionTag: 'PRE_CHECKIN',
+                },
+              ],
+            }
+          : t
+      ),
+    }));
+    notify('info', 'Enlace biométrico enviado por WhatsApp', thread.guestName);
+  };
+
+  const verifyBiometricAndIssueKey = (threadId: string) => {
+    const thread = state.crmThreads.find((t) => t.id === threadId);
+    if (!thread) return;
+    const now = new Date().toISOString();
+    const keyCode = thread.llaveMovilCodigo || `NFC-${thread.roomNumber || 'VIP'}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const stay = thread.stayId ? state.stays.find((s) => s.id === thread.stayId) : undefined;
+    const expira = stay ? `${stay.fechaSalidaProgramada.slice(0, 10)} ${state.config.horaCheckOut}` : `${toYMD(new Date())} 23:59`;
+    const msgEs = `Identidad verificada por biometría ✓. Tu Llave Móvil NFC (${keyCode}) ya está activa hasta ${expira}.`;
+
+    setState((prev) => ({
+      ...prev,
+      guests: thread.guestId
+        ? prev.guests.map((g) => (g.id === thread.guestId ? { ...g, biometriaVerificada: true } : g))
+        : prev.guests,
+      crmThreads: prev.crmThreads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              preCheckInBiometrico: 'VERIFICADO',
+              llaveMovilActiva: true,
+              llaveMovilCodigo: keyCode,
+              llaveExpira: expira,
+              ultimoMensaje: `Llave móvil ${keyCode} emitida`,
+              updatedAt: now,
+              messages: [
+                ...t.messages,
+                {
+                  id: genId('msg'),
+                  sender: 'AGENT_AI',
+                  textoOriginal: translateTextPreview(msgEs, t.idiomaHuesped),
+                  textoTraducidoEs: msgEs,
+                  idioma: t.idiomaHuesped,
+                  timestamp: now,
+                  actionTag: 'DIGITAL_KEY',
+                },
+              ],
+            }
+          : t
+      ),
+      roomDevices: thread.roomId
+        ? prev.roomDevices.map((d) =>
+            d.roomId === thread.roomId
+              ? { ...d, llaveMovilActiva: true, llaveMovilCodigo: keyCode, llaveVigenciaHasta: expira }
+              : d
+          )
+        : prev.roomDevices,
+    }));
+    notify('success', `Biometría validada · Llave ${keyCode} activa`);
+  };
+
+  const approveLateCheckOutFromCrm: PMSContextValue['approveLateCheckOutFromCrm'] = (
+    threadId,
+    extraHours,
+    extraFee,
+    chargeToFolio
+  ) => {
+    const thread = state.crmThreads.find((t) => t.id === threadId);
+    if (!thread || !thread.stayId) {
+      notify('warning', 'El hilo no tiene una estadía activa asociada');
+      return;
+    }
+    const stay = state.stays.find((s) => s.id === thread.stayId && s.status === 'ACTIVA');
+    if (!stay) return;
+
+    renewStay(
+      stay.id,
+      extraHours,
+      'HORAS',
+      extraFee,
+      !chargeToFolio,
+      chargeToFolio ? 'X PAGAR' : 'TARJETA',
+      'BOLETA'
+    );
+
+    const now = new Date().toISOString();
+    const replyEs = `¡Late Check-Out aprobado (+${extraHours}h por S/ ${extraFee.toFixed(2)})! Tu llave móvil NFC ha sido extendida automáticamente.`;
+    setState((prev) => ({
+      ...prev,
+      crmThreads: prev.crmThreads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              ultimoMensaje: replyEs,
+              updatedAt: now,
+              messages: [
+                ...t.messages,
+                {
+                  id: genId('msg'),
+                  sender: 'AGENT_AI',
+                  textoOriginal: translateTextPreview(replyEs, t.idiomaHuesped),
+                  textoTraducidoEs: replyEs,
+                  idioma: t.idiomaHuesped,
+                  timestamp: now,
+                  actionTag: 'LATE_CHECKOUT',
+                },
+              ],
+            }
+          : t
+      ),
+    }));
+  };
+
+  // 4. Room Service & KDS Cocina
+  const createRoomServiceOrder: PMSContextValue['createRoomServiceOrder'] = (payload) => {
+    const stay = state.stays.find((s) => s.id === payload.stayId && s.status === 'ACTIVA');
+    if (!stay || payload.items.length === 0) return null;
+
+    const now = new Date().toISOString();
+    const guest = state.guests.find((g) => g.id === stay.guestId);
+    const items = payload.items
+      .map((it) => {
+        const prod = state.products.find((p) => p.id === it.productId);
+        if (!prod) return null;
+        return {
+          productId: prod.id,
+          descripcion: prod.descripcion,
+          cantidad: it.cantidad,
+          precioUnitario: prod.precio,
+          subtotal: prod.precio * it.cantidad,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+    if (items.length === 0) return null;
+    const total = items.reduce((a, b) => a + b.subtotal, 0);
+    const orderId = genId('kds');
+    const codigo = `KDS-${String(state.roomServiceOrders.length + 85).padStart(3, '0')}`;
+
+    addConsumptionToStay(
+      stay.id,
+      items.map((i) => ({
+        productId: i.productId,
+        cantidad: i.cantidad,
+        precioUnitario: i.precioUnitario,
+      })),
+      Boolean(payload.pagarAhora),
+      payload.metodoPago || 'X PAGAR',
+      payload.voucherType || 'TICKET',
+      'RECEPCION'
+    );
+
+    const order: RoomServiceOrder = {
+      id: orderId,
+      codigo,
+      stayId: stay.id,
+      roomId: stay.roomId,
+      roomNumber: stay.roomNumber,
+      guestName: stay.guestName,
+      alergiasAlert: guest?.alergias,
+      canal: payload.canal,
+      items,
+      total,
+      pagado: Boolean(payload.pagarAhora),
+      status: 'PENDIENTE',
+      notasCocina: payload.notasCocina || '',
+      createdAt: now,
+      whatsappNotificado: false,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      roomServiceOrders: [order, ...prev.roomServiceOrders],
+    }));
+
+    notify(
+      'success',
+      `Comanda ${codigo} enviada a Cocina KDS`,
+      `Hab. ${stay.roomNumber} · S/ ${total.toFixed(2)}${guest?.alergias ? ` · ⚠ ${guest.alergias}` : ''}`
+    );
+    return order;
+  };
+
+  const advanceKdsOrderStatus = (orderId: string, nextStatus: RoomServiceOrder['status']) => {
+    const order = state.roomServiceOrders.find((o) => o.id === orderId);
+    if (!order) return;
+    const now = new Date().toISOString();
+
+    setState((prev) => ({
+      ...prev,
+      roomServiceOrders: prev.roomServiceOrders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: nextStatus,
+              readyAt: nextStatus === 'LISTO' ? now : o.readyAt,
+              whatsappNotificado: nextStatus === 'LISTO' ? true : o.whatsappNotificado,
+            }
+          : o
+      ),
+      stays:
+        nextStatus === 'ENTREGADO' || nextStatus === 'FINALIZADO'
+          ? prev.stays.map((s) =>
+              s.id === order.stayId
+                ? {
+                    ...s,
+                    consumptions: s.consumptions.map((c) =>
+                      order.items.some((oi) => oi.productId === c.productId)
+                        ? { ...c, entregado: true }
+                        : c
+                    ),
+                  }
+                : s
+            )
+          : prev.stays,
+      crmThreads:
+        nextStatus === 'LISTO'
+          ? prev.crmThreads.map((t) =>
+              t.stayId === order.stayId
+                ? {
+                    ...t,
+                    ultimoMensaje: `Pedido ${order.codigo} listo y en camino a Hab. ${order.roomNumber}`,
+                    updatedAt: now,
+                    messages: [
+                      ...t.messages,
+                      {
+                        id: genId('msg'),
+                        sender: 'AGENT_AI',
+                        textoOriginal: translateTextPreview(
+                          `¡Tu pedido ${order.codigo} está listo y va en camino a tu habitación ${order.roomNumber}! Al terminar, avísanos para retirar la bandeja.`,
+                          t.idiomaHuesped
+                        ),
+                        textoTraducidoEs: `¡Tu pedido ${order.codigo} está listo y va en camino a tu habitación ${order.roomNumber}! Al terminar, avísanos para retirar la bandeja.`,
+                        idioma: t.idiomaHuesped,
+                        timestamp: now,
+                        actionTag: 'ROOM_SERVICE',
+                      },
+                    ],
+                  }
+                : t
+            )
+          : prev.crmThreads,
+    }));
+
+    const labelMap: Record<RoomServiceOrder['status'], string> = {
+      PENDIENTE: 'Pendiente',
+      EN_PREPARACION: 'En preparación en Cocina',
+      LISTO: 'Listo · WhatsApp enviado al huésped',
+      ENTREGADO: 'Entregado en habitación',
+      BANDEJA_POR_RECOGER: 'Solicitud de retiro de bandeja',
+      FINALIZADO: 'Bandeja recogida · Ciclo completado',
+    };
+    notify('info', `KDS ${order.codigo} (Hab. ${order.roomNumber})`, labelMap[nextStatus]);
+  };
+
+  // 5. Bell Boys & Transfers
+  const createBellBoyTicket: PMSContextValue['createBellBoyTicket'] = (payload) => {
+    const ticket: BellBoyTicket = {
+      ...payload,
+      id: genId('bb'),
+      codigoQr: `QR-BG-${Math.floor(1000 + Math.random() * 8999)}`,
+      status: payload.status || (payload.tipo === 'GUARDAEQUIPAJE' ? 'RESGUARDADO' : 'PENDIENTE'),
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      bellBoyTickets: [ticket, ...prev.bellBoyTickets],
+    }));
+    notify('success', `Ticket Bell Boy ${ticket.codigoQr}`, `${ticket.guestName} · ${ticket.bultos} bultos`);
+    return ticket;
+  };
+
+  const updateBellBoyStatus = (
+    id: string,
+    status: BellBoyTicket['status'],
+    asignadoA?: string
+  ) => {
+    setState((prev) => ({
+      ...prev,
+      bellBoyTickets: prev.bellBoyTickets.map((b) =>
+        b.id === id ? { ...b, status, asignadoA: asignadoA || b.asignadoA } : b
+      ),
+    }));
+    notify('info', `Ticket equipaje actualizado a ${status}`);
+  };
+
+  const createTransfer: PMSContextValue['createTransfer'] = (payload) => {
+    const transfer: AirportTransfer = {
+      ...payload,
+      id: genId('tr'),
+      codigo: `TRF-${Math.floor(500 + Math.random() * 499)}`,
+      horaActualizada: payload.horaProgramada,
+      retrasoMin: 0,
+      status: 'PROGRAMADO',
+    };
+    setState((prev) => ({
+      ...prev,
+      transfers: [transfer, ...prev.transfers],
+    }));
+    notify('success', `Traslado ${transfer.codigo} programado`, `Vuelo ${transfer.vuelo} · ${transfer.chofer}`);
+    return transfer;
+  };
+
+  const reportFlightDelay = (id: string, delayMinutes: number) => {
+    const tr = state.transfers.find((t) => t.id === id);
+    if (!tr) return;
+    const [h, m] = tr.horaProgramada.split(':').map(Number);
+    const totalMin = ((h || 0) * 60 + (m || 0) + delayMinutes) % (24 * 60);
+    const nextHour = `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+
+    setState((prev) => ({
+      ...prev,
+      transfers: prev.transfers.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              retrasoMin: delayMinutes,
+              horaActualizada: nextHour,
+              status: 'VUELO_RETRASADO',
+            }
+          : t
+      ),
+    }));
+    notify(
+      'warning',
+      `Vuelo ${tr.vuelo} retrasado +${delayMinutes} min`,
+      `Chofer ${tr.chofer} y Bell Boy reprogramados automáticamente para las ${nextHour}.`
+    );
+  };
+
+  const updateTransferStatus = (id: string, status: AirportTransfer['status']) => {
+    setState((prev) => ({
+      ...prev,
+      transfers: prev.transfers.map((t) => (t.id === id ? { ...t, status } : t)),
+    }));
+  };
+
+  // 6. Medical, Oxygen & Emergency Alerts
+  const triggerMedicalAlert: PMSContextValue['triggerMedicalAlert'] = (payload) => {
+    const room = state.rooms.find((r) => r.id === payload.roomId);
+    if (!room) return null;
+    const stay = state.stays.find((s) => s.roomId === room.id && s.status === 'ACTIVA');
+    const guest = stay ? state.guests.find((g) => g.id === stay.guestId) : undefined;
+    const historyParts = [guest?.alergias, guest?.condicionesMedicas].filter(Boolean);
+
+    const alert: MedicalAlert = {
+      id: genId('med'),
+      codigo: `SOS-${String(state.medicalAlerts.length + 20).padStart(3, '0')}`,
+      roomId: room.id,
+      roomNumber: room.numero,
+      stayId: stay?.id,
+      guestId: guest?.id,
+      guestName: stay?.guestName || `HUÉSPED HAB. ${room.numero}`,
+      tipo: payload.tipo,
+      prioridad: payload.tipo === 'EMERGENCIA_CRITICA' ? 'CRITICA' : 'ALTA',
+      origen: payload.origen,
+      alergiasHistorial: historyParts.join(' · ') || 'Sin alergias ni antecedentes declarados en CRM',
+      sintomas: payload.sintomas,
+      cargoServicio: payload.cargoServicio || 0,
+      status: 'ACTIVA',
+      createdAt: new Date().toISOString(),
+    };
+
+    setState((prev) => ({
+      ...prev,
+      medicalAlerts: [alert, ...prev.medicalAlerts],
+    }));
+    notify(
+      'error',
+      `ALERTA MÉDICA ${alert.codigo} · HAB. ${room.numero}`,
+      `${payload.tipo.replace(/_/g, ' ')} · ${alert.guestName}`
+    );
+    return alert;
+  };
+
+  const updateMedicalAlertStatus = (
+    id: string,
+    status: MedicalAlert['status'],
+    asignadoA?: string,
+    cargoServicio?: number
+  ) => {
+    const alert = state.medicalAlerts.find((m) => m.id === id);
+    if (!alert) return;
+    const now = new Date().toISOString();
+    const finalFee = cargoServicio !== undefined ? cargoServicio : alert.cargoServicio;
+
+    setState((prev) => ({
+      ...prev,
+      medicalAlerts: prev.medicalAlerts.map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              status,
+              asignadoA: asignadoA || m.asignadoA,
+              cargoServicio: finalFee,
+              resolvedAt: status === 'RESUELTA' ? now : m.resolvedAt,
+            }
+          : m
+      ),
+      stays:
+        status === 'RESUELTA' && finalFee > 0 && alert.stayId && alert.status !== 'RESUELTA'
+          ? prev.stays.map((s) => {
+              if (s.id !== alert.stayId) return s;
+              const con: StayConsumption = {
+                id: genId('con'),
+                productId: 'med-srv',
+                descripcion: `ASISTENCIA MÉDICA / OXÍGENO (${alert.codigo})`,
+                cantidad: 1,
+                precioUnitario: finalFee,
+                subtotal: finalFee,
+                fecha: now,
+                pagado: false,
+                entregado: true,
+              };
+              const nextTotal = s.totalCargos + finalFee;
+              return {
+                ...s,
+                consumptions: [...s.consumptions, con],
+                totalCargos: nextTotal,
+                saldoPendiente: Math.max(0, nextTotal - s.totalPagado),
+              };
+            })
+          : prev.stays,
+    }));
+    notify('info', `Alerta ${alert.codigo} actualizada a ${status}`);
+  };
+
+  // 7. GRMS Domotics & ACS Access Control
+  const updateRoomDevice = (roomId: string, partial: Partial<RoomDeviceState>) => {
+    const now = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      roomDevices: prev.roomDevices.map((d) =>
+        d.roomId === roomId ? { ...d, ...partial, ultimaActualizacion: now } : d
+      ),
+    }));
+  };
+
+  const toggleMobileKey = (roomId: string, active: boolean, actorName?: string) => {
+    const room = state.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    const now = new Date().toISOString();
+    const stay = state.stays.find((s) => s.roomId === roomId && s.status === 'ACTIVA');
+    const code = active ? `NFC-${room.numero}-${Math.floor(1000 + Math.random() * 8999)}` : undefined;
+    const exp = stay ? `${stay.fechaSalidaProgramada.slice(0, 10)} ${state.config.horaCheckOut}` : undefined;
+
+    setState((prev) => ({
+      ...prev,
+      roomDevices: prev.roomDevices.map((d) =>
+        d.roomId === roomId
+          ? {
+              ...d,
+              llaveMovilActiva: active,
+              llaveMovilCodigo: code,
+              llaveVigenciaHasta: exp,
+              ultimaActualizacion: now,
+            }
+          : d
+      ),
+      acsAccessLogs: [
+        {
+          id: genId('acs'),
+          roomId,
+          roomNumber: room.numero,
+          actor: actorName || stay?.guestName || activeUser.username,
+          rolActor: active ? 'HUESPED_MOVIL' : 'RECEPCION',
+          metodo: active ? 'LLAVE_MOVIL_NFC' : 'APERTURA_REMOTA',
+          autorizado: true,
+          fecha: now,
+        },
+        ...prev.acsAccessLogs,
+      ],
+    }));
+    notify(
+      active ? 'success' : 'info',
+      active ? `Llave móvil ${code} activada en Hab. ${room.numero}` : `Llave móvil desactivada en Hab. ${room.numero}`
+    );
+  };
+
+  const logAcsAccess = (payload: Omit<AcsAccessLog, 'id' | 'fecha'>) => {
+    setState((prev) => ({
+      ...prev,
+      acsAccessLogs: [
+        { ...payload, id: genId('acs'), fecha: new Date().toISOString() },
+        ...prev.acsAccessLogs,
+      ],
+    }));
+  };
+
+  const reportPreventiveIoTMaintenance = (roomId: string, detalle: string) => {
+    const room = state.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    createMaintenance({
+      roomId: room.id,
+      roomNumber: room.numero,
+      categoria: 'DOMOTICA GRMS / CLIMATIZACION IoT',
+      responsable: 'SENSOR IoT + MANTENIMIENTO',
+      observacion: detalle,
+      inicio: toYMD(new Date()),
+      vigencia: toYMD(new Date()),
+    });
+    updateRoomDevice(roomId, { alertaPreventiva: detalle });
+  };
+
+  // CRM AI Guest Command Simulator (executes real PMS workflows!)
+  const simulateGuestCrmCommand: PMSContextValue['simulateGuestCrmCommand'] = (
+    threadId,
+    commandType,
+    params
+  ) => {
+    const thread = state.crmThreads.find((t) => t.id === threadId);
+    if (!thread) return;
+    const guest = thread.guestId ? state.guests.find((g) => g.id === thread.guestId) : undefined;
+    const stay = thread.stayId ? state.stays.find((s) => s.id === thread.stayId && s.status === 'ACTIVA') : undefined;
+    const now = new Date().toISOString();
+
+    let guestMsgEs = params?.customText || '';
+    let aiReplyEs = '';
+    let actionTag: CrmActionTag | undefined;
+
+    if (commandType === 'WAKEUP') {
+      const wakeTime = params?.wakeTime || guest?.horaDespertadorHabitual || '06:30';
+      actionTag = 'WAKEUP';
+      guestMsgEs = `Por favor, despiértame mañana a las ${wakeTime} a. m.`;
+      if (thread.roomId) {
+        scheduleWakeUp({
+          roomId: thread.roomId,
+          horaProgramada: wakeTime,
+          fechaProgramada: toYMD(new Date(Date.now() + 86400000)),
+          canal: 'DUAL_PBX_WHATSAPP',
+          idioma: thread.idiomaHuesped,
+          creadoPor: 'WHATSAPP_BOT',
+        });
+        aiReplyEs = `Listo ${thread.guestName.split(' ')[0]}, despertador programado para las ${wakeTime} (Tel. PBX Hab. ${thread.roomNumber} + WhatsApp). Guardamos tu hora habitual en tu perfil CRM.`;
+      } else {
+        aiReplyEs = `Anotamos tu solicitud de despertador a las ${wakeTime}. Se activará apenas realices tu Check-In.`;
+      }
+    } else if (commandType === 'TOUR') {
+      const pkg =
+        state.tourPackages.find((p) => p.id === params?.tourPackageId) ||
+        state.tourPackages[1] ||
+        state.tourPackages[0];
+      const pax = params?.tourPax || 2;
+      actionTag = 'TOUR';
+      guestMsgEs = `Quiero reservar el paquete turístico "${pkg.nombre}" para ${pax} personas para mañana.`;
+      const booking = bookTourPackage({
+        packageId: pkg.id,
+        stayId: stay?.id,
+        guestId: thread.guestId,
+        guestName: thread.guestName,
+        roomId: thread.roomId,
+        roomNumber: thread.roomNumber,
+        fechaTour: toYMD(new Date(Date.now() + 86400000)),
+        pax,
+        chargeToRoom: Boolean(stay),
+        solicitadoVia: 'AGENTE_WHATSAPP',
+        observaciones: 'Solicitado vía Agente CRM WhatsApp',
+      });
+      aiReplyEs = booking
+        ? `¡Paquete confirmado (${booking.codigo})! ${pkg.nombre} para ${pax} pax. Recojo: ${booking.horaRecojo}. Total S/ ${booking.total.toFixed(2)} ${stay ? `cargado a Hab. ${stay.roomNumber}` : 'por pagar en recepción'}.`
+        : 'No pudimos confirmar cupos en este momento.';
+    } else if (commandType === 'LATE_CHECKOUT') {
+      actionTag = 'LATE_CHECKOUT';
+      guestMsgEs = '¿Puedo salir más tarde mañana (Late Check-Out 3 horas)?';
+      const fee = 3 * state.config.penalidadHoraExtra;
+      aiReplyEs = `¡Claro! Hab. ${thread.roomNumber || '-'} tiene disponibilidad hasta las 13:00 (+3h). Tarifa: S/ ${fee.toFixed(2)}. Recepción puede aprobarlo y extender tu llave móvil en 1 clic.`;
+    } else if (commandType === 'ROOM_SERVICE') {
+      const prod =
+        state.products.find((p) => p.id === params?.productId) ||
+        state.products.find((p) => p.id === 'prod-5') ||
+        state.products[0];
+      actionTag = 'ROOM_SERVICE';
+      guestMsgEs = `Envíenme por favor 2x ${prod.descripcion} a mi habitación ${thread.roomNumber || ''}.`;
+      if (stay) {
+        const order = createRoomServiceOrder({
+          stayId: stay.id,
+          items: [{ productId: prod.id, cantidad: 2 }],
+          canal: 'WHATSAPP_BOT',
+          notasCocina: 'Pedido autogestionado por Agente IA WhatsApp',
+        });
+        aiReplyEs = order
+          ? `Pedido ${order.codigo} enviado directo a Cocina KDS (2x ${prod.descripcion}, S/ ${order.total.toFixed(2)} cargado a Hab. ${stay.roomNumber}).${guest?.alergias ? ` Verificamos tu nota de alergia: ${guest.alergias}.` : ''}`
+          : 'No pudimos registrar el pedido.';
+      } else {
+        aiReplyEs = 'Para pedir Room Service a la habitación es necesario contar con estadía activa.';
+      }
+    } else if (commandType === 'BELL_BOY') {
+      const bultos = params?.bultos || 2;
+      actionTag = 'BELL_BOY';
+      guestMsgEs = `Ya estoy listo para bajar mis ${bultos} maletas de la habitación ${thread.roomNumber || ''}.`;
+      const bb = createBellBoyTicket({
+        tipo: 'BAJADA_MALETAS',
+        roomId: thread.roomId,
+        roomNumber: thread.roomNumber,
+        stayId: stay?.id,
+        guestName: thread.guestName,
+        bultos,
+        descripcionEquipaje: 'Solicitud directa desde WhatsApp',
+        origen: 'WHATSAPP_QR',
+      });
+      aiReplyEs = `Ticket Bell Boy ${bb.codigoQr} enviado al smartwatch de nuestro botones de turno para recoger tus ${bultos} maletas en Hab. ${thread.roomNumber || 'Lobby'}.`;
+    } else if (commandType === 'MEDICAL_SOS') {
+      const mType = params?.medicalType || 'OXIGENO';
+      actionTag = 'MEDICAL_SOS';
+      guestMsgEs =
+        mType === 'OXIGENO'
+          ? 'Me siento un poco agitado por la altura, ¿pueden enviarme oxígeno a la habitación?'
+          : 'Necesito asistencia médica urgente en mi habitación.';
+      if (thread.roomId) {
+        const alert = triggerMedicalAlert({
+          roomId: thread.roomId,
+          tipo: mType,
+          origen: 'WHATSAPP_SOS',
+          sintomas: guestMsgEs,
+        });
+        aiReplyEs = alert
+          ? `Protocolo prioritario ${alert.codigo} activado en Recepción y Tópico Médico. Nuestro equipo va en camino a Hab. ${thread.roomNumber} con historial CRM.`
+          : 'Asistencia notificada a recepción.';
+      }
+    } else {
+      const custom = (params?.customText || '').trim();
+      guestMsgEs = custom || 'Hola, necesito asistencia en recepción.';
+      // Smart intent detection for custom text
+      const low = guestMsgEs.toLowerCase();
+      if (low.includes('tour') || low.includes('machu') || low.includes('valle') || low.includes('paquete') || low.includes('spa')) {
+        const matched =
+          state.tourPackages.find((p) =>
+            p.nombre.toLowerCase().split(' ').some((w) => w.length > 4 && low.includes(w))
+          ) || state.tourPackages[0];
+        actionTag = 'TOUR';
+        const booking = bookTourPackage({
+          packageId: matched.id,
+          stayId: stay?.id,
+          guestId: thread.guestId,
+          guestName: thread.guestName,
+          roomId: thread.roomId,
+          roomNumber: thread.roomNumber,
+          fechaTour: toYMD(new Date(Date.now() + 86400000)),
+          pax: 2,
+          chargeToRoom: Boolean(stay),
+          solicitadoVia: 'AGENTE_WHATSAPP',
+          observaciones: `Detectado en chat: "${guestMsgEs}"`,
+        });
+        aiReplyEs = booking
+          ? `Agendamos el paquete "${matched.nombre}" (${booking.codigo}) para 2 pax · S/ ${booking.total.toFixed(2)}.`
+          : `Tenemos disponible "${matched.nombre}" a S/ ${matched.precioPorPax} por persona.`;
+      } else if (low.includes('despiert') || low.includes('alarma') || low.includes('wake')) {
+        actionTag = 'WAKEUP';
+        if (thread.roomId) {
+          scheduleWakeUp({
+            roomId: thread.roomId,
+            horaProgramada: '06:30',
+            fechaProgramada: toYMD(new Date(Date.now() + 86400000)),
+            canal: 'DUAL_PBX_WHATSAPP',
+            idioma: thread.idiomaHuesped,
+            creadoPor: 'WHATSAPP_BOT',
+          });
+        }
+        aiReplyEs = 'Despertador programado para mañana a las 06:30 a. m. vía Teléfono PBX + WhatsApp.';
+      } else {
+        aiReplyEs = 'Gracias por escribirnos. Un asesor de La Chuspa Tech y nuestro sistema inteligente están atendiendo tu solicitud.';
+      }
+    }
+
+    const guestMsg: CrmMessage = {
+      id: genId('msg'),
+      sender: 'GUEST',
+      textoOriginal: translateTextPreview(guestMsgEs, thread.idiomaHuesped).replace(/^\[.*?\]\s*/, ''),
+      textoTraducidoEs: guestMsgEs,
+      idioma: thread.idiomaHuesped,
+      timestamp: now,
+      actionTag,
+    };
+    const agentMsg: CrmMessage = {
+      id: genId('msg'),
+      sender: 'AGENT_AI',
+      textoOriginal: translateTextPreview(aiReplyEs, thread.idiomaHuesped),
+      textoTraducidoEs: aiReplyEs,
+      idioma: thread.idiomaHuesped,
+      timestamp: new Date(Date.now() + 1000).toISOString(),
+      actionTag,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      crmThreads: prev.crmThreads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              ultimoMensaje: aiReplyEs,
+              updatedAt: now,
+              unreadCount: 0,
+              messages: [...t.messages, guestMsg, agentMsg],
+            }
+          : t
+      ),
+    }));
+  };
+
   return (
     <PMSContext.Provider
       value={{
@@ -2290,6 +3645,32 @@ export const PMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveAuthCode,
         deleteAuthCode,
         createSupportTicket,
+        scheduleWakeUp,
+        triggerWakeUpCall,
+        respondWakeUpCall,
+        deleteWakeUpCall,
+        saveTourPackage,
+        bookTourPackage,
+        updateTourBookingStatus,
+        ensureCrmThread,
+        sendCrmMessage,
+        simulateGuestCrmCommand,
+        sendBiometricPreCheckIn,
+        verifyBiometricAndIssueKey,
+        approveLateCheckOutFromCrm,
+        createRoomServiceOrder,
+        advanceKdsOrderStatus,
+        createBellBoyTicket,
+        updateBellBoyStatus,
+        createTransfer,
+        reportFlightDelay,
+        updateTransferStatus,
+        triggerMedicalAlert,
+        updateMedicalAlertStatus,
+        updateRoomDevice,
+        toggleMobileKey,
+        logAcsAccess,
+        reportPreventiveIoTMaintenance,
       }}
     >
       {children}

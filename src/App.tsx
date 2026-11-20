@@ -18,6 +18,10 @@ import { PersonalModule } from './components/modules/PersonalModule';
 import { DashboardReportesModule } from './components/modules/DashboardReportesModule';
 import { AdminSistemaModule } from './components/modules/AdminSistemaModule';
 import { DisenoSistemaModule } from './components/modules/DisenoSistemaModule';
+import { CrmWhatsAppModule } from './components/modules/CrmWhatsAppModule';
+import { DespertadorPbxToursModule } from './components/modules/DespertadorPbxToursModule';
+import { KdsBellBoySaludModule } from './components/modules/KdsBellBoySaludModule';
+import { GrmsDomoticaModule } from './components/modules/GrmsDomoticaModule';
 import type { ModuleId } from './types/pms';
 
 function PMSWorkspace() {
@@ -92,6 +96,17 @@ function PMSWorkspace() {
       case 'servicios_pagos':
       case 'soporte':
         return <AdminSistemaModule mode={safeModule} />;
+      case 'crm_whatsapp':
+        return <CrmWhatsAppModule />;
+      case 'despertador_pbx':
+      case 'paquetes_tours':
+        return <DespertadorPbxToursModule mode={safeModule} />;
+      case 'kds_cocina':
+      case 'bell_boys':
+      case 'salud_emergencias':
+        return <KdsBellBoySaludModule mode={safeModule} />;
+      case 'grms_iot':
+        return <GrmsDomoticaModule />;
       default:
         return <RecepcionModule onNavigate={handleNavigate} />;
     }

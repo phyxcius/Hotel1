@@ -1,4 +1,19 @@
-import type { AgencyGroup, PMSState, Purchase, Stay } from '../types/pms';
+import type {
+  AcsAccessLog,
+  AgencyGroup,
+  AirportTransfer,
+  BellBoyTicket,
+  CrmThread,
+  MedicalAlert,
+  PMSState,
+  Purchase,
+  RoomDeviceState,
+  RoomServiceOrder,
+  Stay,
+  TourBooking,
+  TourPackage,
+  WakeUpCall,
+} from '../types/pms';
 
 export const DEFAULT_FIREBASE_RTDB_URL = 'https://hotel1-a87e6-default-rtdb.firebaseio.com';
 const DB_NODE = 'hotel_pms/v1';
@@ -61,6 +76,35 @@ export function hydrateStateFromSnapshot(raw: unknown, defaults: PMSState): PMSS
     accesos: normalizeArray(u.accesos, []),
   }));
 
+  const tourPackages =
+    candidate.tourPackages === undefined
+      ? defaults.tourPackages
+      : normalizeArray<TourPackage>(candidate.tourPackages, defaults.tourPackages).map((pkg) => ({
+          ...pkg,
+          incluye: normalizeArray(pkg.incluye, []),
+        }));
+
+  const crmThreads =
+    candidate.crmThreads === undefined
+      ? defaults.crmThreads
+      : normalizeArray<CrmThread>(candidate.crmThreads, []).map((t) => ({
+          ...t,
+          messages: normalizeArray(t.messages, []),
+        }));
+
+  const roomServiceOrders =
+    candidate.roomServiceOrders === undefined
+      ? defaults.roomServiceOrders
+      : normalizeArray<RoomServiceOrder>(candidate.roomServiceOrders, []).map((o) => ({
+          ...o,
+          items: normalizeArray(o.items, []),
+        }));
+
+  const roomDevices =
+    candidate.roomDevices === undefined
+      ? defaults.roomDevices
+      : normalizeArray<RoomDeviceState>(candidate.roomDevices, defaults.roomDevices);
+
   return {
     ...defaults,
     ...candidate,
@@ -114,6 +158,34 @@ export function hydrateStateFromSnapshot(raw: unknown, defaults: PMSState): PMSS
     users,
     authCodes: normalizeArray(candidate.authCodes, defaults.authCodes),
     supportTickets: normalizeArray(candidate.supportTickets, []),
+    wakeUpCalls:
+      candidate.wakeUpCalls === undefined
+        ? defaults.wakeUpCalls
+        : normalizeArray<WakeUpCall>(candidate.wakeUpCalls, []),
+    tourPackages,
+    tourBookings:
+      candidate.tourBookings === undefined
+        ? defaults.tourBookings
+        : normalizeArray<TourBooking>(candidate.tourBookings, []),
+    crmThreads,
+    roomServiceOrders,
+    bellBoyTickets:
+      candidate.bellBoyTickets === undefined
+        ? defaults.bellBoyTickets
+        : normalizeArray<BellBoyTicket>(candidate.bellBoyTickets, []),
+    transfers:
+      candidate.transfers === undefined
+        ? defaults.transfers
+        : normalizeArray<AirportTransfer>(candidate.transfers, []),
+    medicalAlerts:
+      candidate.medicalAlerts === undefined
+        ? defaults.medicalAlerts
+        : normalizeArray<MedicalAlert>(candidate.medicalAlerts, []),
+    roomDevices,
+    acsAccessLogs:
+      candidate.acsAccessLogs === undefined
+        ? defaults.acsAccessLogs
+        : normalizeArray<AcsAccessLog>(candidate.acsAccessLogs, []),
   };
 }
 
